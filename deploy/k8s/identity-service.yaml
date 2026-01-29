@@ -1,39 +1,199 @@
+# ========================================
+# Smart Factory IoT Backend - IdentityService
+# ========================================
+# Handles authentication and authorization using Microsoft Entra ID
+# Follows SOLID principles and Kubernetes best practices
+# ========================================
+
+---
+# IdentityService Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: identity-service
   namespace: smart-factory
+  labels:
+    app: identity-service
+    tier: backend
+    version: v1
 spec:
+  # High availability with 2 replicas
   replicas: 2
+  
+  # Rolling update strategy for zero-downtime deployments
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
   selector:
     matchLabels:
       app: identity-service
+  
   template:
     metadata:
       labels:
         app: identity-service
+        tier: backend
+        version: v1
     spec:
+      # Security context for pod-level security
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      
       containers:
       - name: identity-service
-        image: smartfactory.azurecr.io/identity-service:latest
+        image: smartfactory.azurecr.io/identityservice:latest
+        imagePullPolicy: Always
+        
+        # Container ports
         ports:
-        - containerPort: 80
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        - name: https
+          containerPort: 443
+          protocol: TCP
+        
+        # Environment variables from ConfigMap and Secrets
         env:
+        - name: ASPNETCORE_ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: ASPNETCORE_ENVIRONMENT
+        
         - name: ConnectionStrings__DefaultConnection
           valueFrom:
             secretKeyRef:
               name: db-secrets
               key: connection-string
+        
+        - name: AzureAd__TenantId
+          valueFrom:
+            secretKeyRef:
+              name: identity-secrets
+              key: tenant-id
+        
+        - name: AzureAd__ClientId
+          valueFrom:
+            secretKeyRef:
+              name: identity-secrets
+              key: client-id
+        
+        - name: AzureAd__ClientSecret
+          valueFrom:
+            secretKeyRef:
+              name: identity-secrets
+              key: client-secret
+        
+        - name: AzureAd__Instance
+          value: "https://login.microsoftonline.com/"
+        
+        - name: Logging__LogLevel__Default
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: Logging__LogLevel__Default
+        
+        # Resource limits
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        
+        # Liveness probe
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        
+        # Readiness probe
+        readinessProbe:
+          httpGet:
+            path: /health/ready
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+          successThreshold: 1
+        
+        # Startup probe
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 0
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 30
+      
+      restartPolicy: Always
+      dnsPolicy: ClusterFirst
+
 ---
+# IdentityService Service
 apiVersion: v1
 kind: Service
 metadata:
   name: identity-service
   namespace: smart-factory
+  labels:
+    app: identity-service
+    tier: backend
 spec:
   type: ClusterIP
   ports:
-  - port: 80
-    targetPort: 80
+  - name: http
+    port: 80
+    targetPort: http
+    protocol: TCP
   selector:
     app: identity-service
+  sessionAffinity: ClientIP
+  sessionAffinityConfig:
+    clientIP:
+      timeoutSeconds: 10800
+
+---
+# Horizontal Pod Autoscaler for IdentityService
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: identity-service-hpa
+  namespace: smart-factory
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: identity-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
