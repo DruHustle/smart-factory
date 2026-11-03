@@ -1,0 +1,10 @@
+# The namespace is owned by the dashboard deployment bundle. Apply that bundle first.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: smart-factory
+  labels:
+    app.kubernetes.io/part-of: smart-factory
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted

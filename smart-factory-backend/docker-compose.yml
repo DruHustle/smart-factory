@@ -1,0 +1,171 @@
+name: smart-factory-backend
+services:
+  rabbitmq:
+    image: rabbitmq:4.3.6-management
+    restart: unless-stopped
+    ports: ["127.0.0.1:5672:5672", "127.0.0.1:15672:15672", "127.0.0.1:1883:1883"]
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:?Set broker user in .env.local}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:?Set broker password in .env.local}
+    command: >-
+      sh -c "rabbitmq-plugins enable --offline rabbitmq_mqtt && rabbitmq-server"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    networks: [sf-network]
+
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?Set database user in .env.local}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set database password in .env.local}
+      POSTGRES_DB: ${POSTGRES_DB:-SmartFactory}
+    ports: ["127.0.0.1:5433:5432"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./deploy/local-dev/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+    networks: [sf-network]
+
+  # The entrypoint init hook runs only for an empty volume; this repeatable
+  # preparation step also repairs schema additions on existing local volumes.
+  telemetry-schema-prepare:
+    image: postgres:16
+    restart: "no"
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      PGUSER: ${POSTGRES_USER:?Set database user in .env.local}
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set database password in .env.local}
+      PGDATABASE: ${POSTGRES_DB:-SmartFactory}
+    command: ["sh", "-c", "psql -v ON_ERROR_STOP=1 -f /migrations/local-dev-init.sql"]
+    volumes:
+      - ./deploy/local-dev/init.sql:/migrations/local-dev-init.sql:ro
+    depends_on: { postgres: { condition: service_healthy } }
+    networks: [sf-network]
+
+  device-service:
+    build: { context: ., dockerfile: src/Services/DeviceService/Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      APPLY_DATABASE_MIGRATIONS: ${APPLY_DATABASE_MIGRATIONS:-true}
+      # Commands for physical gateways must use the same broker as the Pi,
+      # with a dedicated identity scoped to gateway command topics.
+      MqttBrokerHost: ${EDGE_COMMAND_MQTT_HOST:-rabbitmq}
+      MqttBrokerPort: ${EDGE_COMMAND_MQTT_PORT:-1883}
+      MqttUsername: ${EDGE_COMMAND_MQTT_USERNAME:-${RABBITMQ_DEFAULT_USER}}
+      MqttPassword: ${EDGE_COMMAND_MQTT_PASSWORD:-${RABBITMQ_DEFAULT_PASS}}
+      MqttUseTls: ${EDGE_COMMAND_MQTT_USE_TLS:-false}
+      EDGE_SITE_ID: ${EDGE_SITE_ID:-factory-a}
+      EDGE_LINE_ID: ${EDGE_LINE_ID:-line-1}
+      JWT_SECRET: ${JWT_SECRET:?Set shared dashboard JWT secret in .env.local}
+      AAS_PROVISIONING_TOKEN: ${AAS_PROVISIONING_TOKEN:?Set private provisioner token in .env.local}
+      REDIS_URL: ${DEVICE_SERVICE_REDIS_URL:-redis://:${REDIS_PASSWORD:?Set the same Redis password as the dashboard stack}@redis:6379}
+      AAS_REPOSITORY_URL: ${AAS_REPOSITORY_URL:-http://aas-repository:8081}
+      AAS_REPO_URL: ${AAS_REPO_URL:-}
+      AAS_SUBMODEL_REPOSITORY_URL: ${AAS_SUBMODEL_REPOSITORY_URL:-http://submodel-repository:8083}
+      AAS_CONCEPT_DESCRIPTION_REPOSITORY_URL: ${AAS_CONCEPT_DESCRIPTION_REPOSITORY_URL:-http://concept-description-repository:8085}
+      AASX_FILE_SERVER_URL: ${AASX_FILE_SERVER_URL:-http://aasx-file-server:8086}
+      AAS_REGISTRY_URL: ${AAS_REGISTRY_URL:-http://aas-registry:8082}
+      AAS_SUBMODEL_REGISTRY_URL: ${AAS_SUBMODEL_REGISTRY_URL:-http://submodel-registry:8084}
+      AAS_REPOSITORY_REGISTRY_INTEGRATION: ${AAS_REPOSITORY_REGISTRY_INTEGRATION:-true}
+      AAS_ALLOW_UNAUTHENTICATED_LOCAL: ${AAS_ALLOW_UNAUTHENTICATED_LOCAL:-true}
+      AAS_ALLOW_UNAUTHENTICATED_PRIVATE: ${AAS_ALLOW_UNAUTHENTICATED_PRIVATE:-false}
+      AAS_OIDC_TOKEN_URL: ${AAS_OIDC_TOKEN_URL:-}
+      AAS_OIDC_DISCOVERY_URL: ${AAS_OIDC_DISCOVERY_URL:-}
+      AAS_OIDC_SCOPE: ${AAS_OIDC_SCOPE:-}
+      AAS_OIDC_CLIENT_ID: ${AAS_OIDC_CLIENT_ID:-}
+      AAS_OIDC_CLIENT_SECRET: ${AAS_OIDC_CLIENT_SECRET:-}
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-SmartFactory};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SSL Mode=Disable
+    depends_on: { postgres: { condition: service_healthy } }
+    ports: ["127.0.0.1:5001:8080"]
+    networks: [sf-network, aas-shared]
+
+  identity-service:
+    build: { context: ., dockerfile: src/Services/IdentityService/Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DASHBOARD_DATABASE_CONNECTION: ${DASHBOARD_DATABASE_CONNECTION:?Set dashboard database connection in .env.local}
+      DASHBOARD_SERVICE_TOKEN: ${DASHBOARD_SERVICE_TOKEN:?Set the shared 32-byte service token}
+    ports: ["127.0.0.1:5002:8080"]
+    networks: [sf-network, aas-shared]
+
+  notification-service:
+    build: { context: ., dockerfile: src/Services/NotificationService/Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DASHBOARD_DATABASE_CONNECTION: ${DASHBOARD_DATABASE_CONNECTION:?Set dashboard database connection in .env.local}
+      DASHBOARD_SERVICE_TOKEN: ${DASHBOARD_SERVICE_TOKEN:?Set the shared 32-byte service token}
+      PASSWORD_RESET_ORIGIN: ${PASSWORD_RESET_ORIGIN:-http://localhost:3000}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-resend}
+      SMTP_HOST: ${SMTP_HOST:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_ALLOW_ALL_RECIPIENTS: ${SMTP_ALLOW_ALL_RECIPIENTS:-false}
+      SMTP_ALLOWED_RECIPIENTS: ${SMTP_ALLOWED_RECIPIENTS:-}
+      SMTP_ALLOWED_RECIPIENT_DOMAINS: ${SMTP_ALLOWED_RECIPIENT_DOMAINS:-}
+      SES_ENABLED: ${SES_ENABLED:-false}
+      SES_REGION: ${SES_REGION:-us-east-1}
+      SES_FROM: ${SES_FROM:-}
+      SES_ALLOW_ALL_RECIPIENTS: ${SES_ALLOW_ALL_RECIPIENTS:-false}
+      SES_ALLOWED_RECIPIENTS: ${SES_ALLOWED_RECIPIENTS:-}
+      SES_ALLOWED_RECIPIENT_DOMAINS: ${SES_ALLOWED_RECIPIENT_DOMAINS:-}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM: ${RESEND_FROM:-}
+      RESEND_ALLOWED_RECIPIENT_DOMAINS: ${RESEND_ALLOWED_RECIPIENT_DOMAINS:-}
+    ports: ["127.0.0.1:5003:8080"]
+    networks: [sf-network, aas-shared]
+
+  analytics-service:
+    build: { context: ., dockerfile: src/Services/AnalyticsService/Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DASHBOARD_DATABASE_CONNECTION: ${DASHBOARD_DATABASE_CONNECTION:?Set dashboard database connection in .env.local}
+      DASHBOARD_SERVICE_TOKEN: ${DASHBOARD_SERVICE_TOKEN:?Set the shared 32-byte service token}
+    ports: ["127.0.0.1:5004:8080"]
+    networks: [sf-network, aas-shared]
+
+  telemetry-service:
+    build: { context: ., dockerfile: src/Services/TelemetryService/Dockerfile }
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      DOTNET_ENVIRONMENT: Development
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-SmartFactory};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SSL Mode=Disable
+      PostgresConnectionString: Host=postgres;Port=5432;Database=${POSTGRES_DB:-SmartFactory};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD};SSL Mode=Disable
+      # Default to local RabbitMQ; override TELEMETRY_MQTT_* to ingest from
+      # the physical gateway's CloudAMQP broker during local dashboard tests.
+      MqttBrokerHost: ${TELEMETRY_MQTT_HOST:-rabbitmq}
+      MqttBrokerPort: ${TELEMETRY_MQTT_PORT:-1883}
+      MqttUsername: ${TELEMETRY_MQTT_USERNAME}
+      MqttPassword: ${TELEMETRY_MQTT_PASSWORD}
+      MqttUseTls: ${TELEMETRY_MQTT_USE_TLS}
+      MqttTopic: ${TELEMETRY_MQTT_TOPIC}
+      MqttHeartbeatTopic: ${TELEMETRY_MQTT_HEARTBEAT_TOPIC}
+      INTERNAL_TELEMETRY_SINK_URL: ${INTERNAL_TELEMETRY_SINK_URL:-http://dashboard:3000/api/internal/telemetry}
+      INGESTION_API_TOKEN: ${INGESTION_API_TOKEN:-}
+    depends_on:
+      rabbitmq: { condition: service_healthy }
+      postgres: { condition: service_healthy }
+      telemetry-schema-prepare: { condition: service_completed_successfully }
+    ports: ["127.0.0.1:5005:8080"]
+    networks: [sf-network, aas-shared]
+
+volumes:
+  postgres_data:
+networks:
+  sf-network:
+    driver: bridge
+  aas-shared:
+    name: smart-factory-shared
+    external: true

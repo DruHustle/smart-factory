@@ -1,0 +1,151 @@
+# LOCAL DEVELOPMENT ONLY. This in-cluster PostgreSQL example is excluded from the production Kustomization.
+# ========================================
+# Smart Factory Backend - PostgreSQL Database
+# ========================================
+# This manifest deploys PostgreSQL 16 with:
+# - Persistent storage for data durability
+# - Resource limits for stability
+# - Health checks for reliability
+# - Security best practices
+# ========================================
+
+---
+# PersistentVolumeClaim for PostgreSQL data persistence
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-pvc
+  namespace: smart-factory
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  # Uncomment and specify storageClassName for cloud providers
+  # storageClassName: managed-premium  # Azure
+  # storageClassName: gp2              # AWS
+
+---
+# PostgreSQL Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: smart-factory
+  labels:
+    app: postgres
+    tier: database
+spec:
+  # Single replica for PostgreSQL (stateful workload)
+  replicas: 1
+  strategy:
+    type: Recreate  # Ensures only one instance runs at a time
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        tier: database
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        imagePullPolicy: IfNotPresent
+        
+        # Environment variables from secrets
+        env:
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: db-secrets
+              key: postgres-password
+        - name: POSTGRES_USER
+          valueFrom:
+            secretKeyRef:
+              name: db-secrets
+              key: postgres-user
+        - name: POSTGRES_DB
+          valueFrom:
+            configMapKeyRef:
+              name: app-config
+              key: Database__Name
+        
+        # Container ports
+        ports:
+        - name: postgres
+          containerPort: 5432
+          protocol: TCP
+        
+        # Volume mounts for persistent storage
+        volumeMounts:
+        - name: postgres-storage
+          mountPath: /var/lib/postgresql/data
+        
+        # Resource limits (adjust based on workload)
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "1Gi"
+            cpu: "500m"
+        
+        # Liveness probe - checks if PostgreSQL is running
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+            - -d
+            - SmartFactory
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        # Readiness probe - checks if PostgreSQL is ready to accept connections
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - postgres
+            - -d
+            - SmartFactory
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+      
+      # Volumes
+      volumes:
+      - name: postgres-storage
+        persistentVolumeClaim:
+          claimName: postgres-pvc
+
+---
+# PostgreSQL Service
+# Exposes PostgreSQL within the cluster for other services
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: smart-factory
+  labels:
+    app: postgres
+    tier: database
+spec:
+  type: ClusterIP  # Internal cluster access only
+  ports:
+  - name: postgres
+    port: 5432
+    targetPort: 5432
+    protocol: TCP
+  selector:
+    app: postgres
+  # Session affinity for consistent connections
+  sessionAffinity: ClientIP
