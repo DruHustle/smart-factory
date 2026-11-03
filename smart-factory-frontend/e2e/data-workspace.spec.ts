@@ -725,6 +725,11 @@ test("engineers can change the shared factory timezone without commissioning shi
   await expect(chart.getByRole("columnheader", { name: "Time (Europe/Berlin)" })).toBeVisible();
   expect(requests.filter((request) => request.procedure === "operations.setTimeZone")).toHaveLength(1);
   expect(requests.find((request) => request.procedure === "operations.setTimeZone")?.input).toMatchObject({ expectedVersion: 0, expectedTimeZone: "UTC", timeZone: "Europe/Berlin" });
+  await page.goto("/#/inventory/device%3A13/telemetry");
+  const telemetry = page.getByRole("region", { name: "WROVER sensor observations" });
+  await telemetry.getByText("Accessible bucket table").click();
+  await expect(telemetry.getByRole("columnheader", { name: "Time (Europe/Berlin)" })).toBeVisible();
+  await page.goto("/#/");
   await page.setViewportSize({ width: 320, height: 900 });
   await page.getByRole("button", { name: "Change factory timezone, current Europe/Berlin" }).click();
   await dialog.getByLabel("Site timezone").fill("America/Argentina/Buenos_Aires");
@@ -1306,10 +1311,21 @@ for (const width of [390, 1440])
       });
     });
 
+test("Overview gives the floor the full width when no incidents need attention", async ({ page }) => {
+  await workspaceFixture(page);
+  await page.setViewportSize({ width: 1440, height: 960 });
+  await page.goto("/#/");
+  await expect(page.locator(".overview-kpis").getByRole("link", { name: /^Open incidents\s+0$/ })).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Factory status" })).toHaveCount(0);
+  const floor = await page.getByTestId("factory-floor").boundingBox();
+  const area = await page.locator(".overview-main-grid").boundingBox();
+  expect(floor && area && floor.width >= area.width - 2).toBe(true);
+});
+
 test("Overview design keeps factory, status and summaries in the desktop composition and restricts live infrastructure", async ({
   page,
 }) => {
-  const requests = await workspaceFixture(page);
+  const requests = await workspaceFixture(page, false, { summary: "populated", attention: true });
   await page.setViewportSize({ width: 1600, height: 1050 });
   await page.goto("/#/");
   const floor = page.getByTestId("factory-floor");
@@ -1536,6 +1552,11 @@ for (const width of [320, 360, 375, 390, 430, 768, 1440]) {
     await page.goto("/#/");
     const cards = page.locator(".overview-kpi");
     await expect(cards).toHaveCount(6);
+    if (process.env.LOCAL_OVERVIEW_SCREENSHOTS && [390, 1440].includes(width)) {
+      await expect(cards.first()).not.toContainText("…");
+      await expect(page.getByRole("complementary", { name: "Factory status" })).toHaveCount(0);
+      await page.screenshot({ path: `${process.env.LOCAL_OVERVIEW_SCREENSHOTS}/overview-${width}.png` });
+    }
     const grid = await page.locator(".overview-kpis").boundingBox();
     const last = await cards.last().boundingBox();
     expect(grid).toBeTruthy();
@@ -1583,16 +1604,7 @@ for (const width of [320, 360, 375, 390, 430, 768, 1440]) {
           ),
         ).toBe("16px");
       }
-      const emptyAttention = page.locator(".overview-attention-empty");
-      await expect(emptyAttention).toContainText("No open process incidents.");
-      expect((await emptyAttention.boundingBox())!.height).toBeLessThanOrEqual(
-        100,
-      );
-      expect(
-        (await emptyAttention
-          .getByRole("link", { name: "View alerts" })
-          .boundingBox())!.height,
-      ).toBeGreaterThanOrEqual(44);
+      await expect(page.getByRole("complementary", { name: "Factory status" })).toHaveCount(0);
       const operations = page.getByTestId("ot-operations");
       const timezoneButton = page.getByRole("button", { name: "Change factory timezone, current UTC" });
       const timezoneBox = await timezoneButton.boundingBox();
