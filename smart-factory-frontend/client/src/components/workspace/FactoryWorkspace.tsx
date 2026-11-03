@@ -170,12 +170,6 @@ export function FactoryWorkspace({
       }),
     [factory?.items, draft],
   );
-  const devices = items.filter((item) => item.kind === "device");
-  const onlineDevices = devices.filter((item) => item.status === "live").length;
-  const offlineDevices = devices.filter(
-    (item) => item.status === "offline",
-  ).length;
-  const reviewDevices = devices.length - onlineDevices - offlineDevices;
   const change = (mutate: (next: NamedFactoryDraft) => void) => {
     if (!draft) return;
     const next = structuredClone(draft);
@@ -397,13 +391,14 @@ export function FactoryWorkspace({
       )}
       {factory && draft && (
         <>
-          <div
-            className="grid grid-cols-3 gap-px overflow-hidden rounded-lg border bg-border"
-            aria-label="Factory totals"
-          >
+          <div className="factory-totals" aria-label="Factory totals">
             {[
               [Boxes, "Items", factory.total],
-              [Radio, "Devices", devices.length],
+              [
+                Radio,
+                "Devices",
+                items.filter((i) => i.kind === "device").length,
+              ],
               [
                 Map,
                 "Floor",
@@ -412,7 +407,7 @@ export function FactoryWorkspace({
             ].map(([Icon, label, value]) => {
               const I = Icon as typeof Boxes;
               return (
-                <div key={String(label)} className="min-w-0 bg-card px-3 py-2">
+                <div key={String(label)} className="min-w-0 px-3 py-2">
                   <span className="flex items-center gap-1 text-xs text-muted-foreground">
                     <I className="size-3.5" />
                     {String(label)}
@@ -420,12 +415,6 @@ export function FactoryWorkspace({
                   <strong className="mt-1 block break-words text-lg">
                     {String(value)}
                   </strong>
-                  {label === "Devices" && devices.length > 0 && (
-                    <span className="block text-xs text-muted-foreground">
-                      {onlineDevices} online · {offlineDevices} offline
-                      {reviewDevices > 0 ? ` · ${reviewDevices} review` : ""}
-                    </span>
-                  )}
                 </div>
               );
             })}
@@ -487,7 +476,7 @@ export function FactoryWorkspace({
           <div
             className={
               mode === "overview" && !c.demo
-                ? "grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.35fr)]"
+                ? "named-factory-overview-grid grid min-w-0 items-start gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,0.35fr)]"
                 : "min-w-0"
             }
           >
