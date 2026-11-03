@@ -7,7 +7,7 @@ One industrial workspace for AAS-backed assets, independent devices, gateways, n
 
 Production topology is **Vercel UI → Oracle ARM64 API**, with a separate **singleton Oracle telemetry/notification worker** and the existing private BaSyx stack. Render workflows are retained only for gated rollback history. See the [current deployment runbook](deploy/oracle/README.md), [architecture](docs/architecture.md) and [operating guide](docs/operations.md). Dated qualification documents establish only their recorded revision and environment; they do not establish the current runtime.
 
-[Product redesign, F01–F20 disposition and acceptance](docs/product-experience-qualification.md) · [Before/after screenshots](docs/evidence/product-experience/README.md)
+[Product redesign, F01–F20 disposition and acceptance](docs/product-experience-qualification.md) · Before/after screenshots (retained locally)
 
 [28 October review and gap remediation](docs/review-2026-10-28.md) · [Service health operating guide](docs/service-health.md)
 
@@ -48,7 +48,7 @@ Open `http://localhost:3000`. Create the first individual administrator using th
 
 Registration saves identity, explicit links and a reviewed software route. It does not install credentials, publish a gateway profile or establish physical commissioning. Protocol secrets stay outside browser records and published mappings. Native OTA remains unavailable until a verified updater is installed.
 
-The [industrial device connectivity guide](docs/industrial-device-connectivity.md) covers native OPC UA, Modbus TCP/RTU, MQTT, OPC UA FX observation and TSN collection, including gateway commissioning and typed asset tags. The [OPC UA FX and TSN guide](docs/fx-tsn.md) explains industrial communication and the diagnostics workspace. See [factory layouts](docs/factory-layouts.md) for hand grabbing and fullscreen, the [editable demo sandbox](docs/editable-demo.md) for resettable workflows, and the [current screenshots](docs/evidence/release-20261030/README.md). The [engineering drawing guide](docs/engineering-drawings.md) explains editable DXF and matching A3 PDF exports, required drawing data and source-document recovery. The [documentation index](DOCUMENTATION_INDEX.md) includes current PDF guides and diagram images.
+The [industrial device connectivity guide](docs/industrial-device-connectivity.md) covers native OPC UA, Modbus TCP/RTU, MQTT, OPC UA FX observation and TSN collection, including gateway commissioning and typed asset tags. The [OPC UA FX and TSN guide](docs/fx-tsn.md) explains industrial communication and the diagnostics workspace. See [factory layouts](docs/factory-layouts.md) for hand grabbing and fullscreen, the [editable demo sandbox](docs/editable-demo.md) for resettable workflows, and the current screenshots (retained locally). The [engineering drawing guide](docs/engineering-drawings.md) explains editable DXF and matching A3 PDF exports, required drawing data and source-document recovery. The [documentation index](DOCUMENTATION_INDEX.md) includes current PDF guides and diagram images.
 
 ## Access and evidence
 

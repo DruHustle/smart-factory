@@ -23,7 +23,7 @@ The expanded candidate must be built and qualified at its own exact revision. Th
 
 The [operations guide](ot-operations.md) explains what users can do and how the calculations are bounded.
 
-[Desktop/mobile application screenshots and progressive 3D evidence](evidence/ot-operations-20261102/README.md) show the implemented workflow and its visible evidence labels.
+Desktop/mobile application screenshots and progressive 3D evidence (retained locally) show the implemented workflow and its visible evidence labels.
 
 ## Local validation
 
@@ -31,7 +31,7 @@ The local test environment uses disposable PostgreSQL 16 databases, Redis and sy
 
 Focused results recorded during implementation:
 
-- Final complete repository run: **1,039 tests passed, zero failed, zero skipped** across 121 test files. The account-access suite ran all twelve tests using the locked local migration CLI, and the AutomationML schema validator was installed so its schema test ran. A [machine-readable local summary](evidence/ot-operations-20261102/validation-summary.json) records the file results.
+- Final complete repository run: **1,039 tests passed, zero failed, zero skipped** across 121 test files. The account-access suite ran all twelve tests using the locked local migration CLI, and the AutomationML schema validator was installed so its schema test ran. A machine-readable local summary (retained locally) records the file results.
 
 - Alarm/source/factory/action regression: 8 files, 48 tests passed. Subsequent clearance-quality and indexed-query changes received focused reruns, including all 7 alarm tests against a freshly migrated database.
 - Operations calculations, persistence and factory alignment: 24 tests passed, including a terminal maintenance signal that remains consistent with the displayed maintenance state.

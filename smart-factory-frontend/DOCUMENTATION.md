@@ -13,4 +13,4 @@ Current source documents:
 - [OPC UA FX and TSN](docs/fx-tsn.md)
 - [Factory layouts and mouse controls](docs/factory-layouts.md)
 - [Editable demo sandbox](docs/editable-demo.md)
-- [Current screenshots](docs/evidence/release-20261030/README.md)
+- Current screenshots (retained locally)

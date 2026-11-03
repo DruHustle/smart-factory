@@ -3,3 +3,9 @@
 /.vscode/
 .DS_Store
 .vercel/
+
+# Diagnostic captures and release evidence remain local to the installation.
+/smart-factory-frontend/docs/evidence/
+/smart-factory-frontend/node_modules
+/smart-factory-backend/node_modules
+/smart-factory-edge/node_modules

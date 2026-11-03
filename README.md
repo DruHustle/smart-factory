@@ -9,7 +9,7 @@ build configuration, migrations, and documentation.
 - `smart-factory-edge/` — gateway and device firmware.
 
 This repository is being prepared from the previously deployed component
-revisions. Their complete Git histories and original remotes are retained.
+revisions. The original component repositories and remotes retain their complete histories. This combined repository carries a filtered copy of that history: diagnostic evidence and non-example environment files are excluded, so its historical commit IDs differ from the originals.
 The current production release process still uses those original repositories;
 this combined layout must not be used to promote a release until the monorepo
 CI and release workflows have been validated.
