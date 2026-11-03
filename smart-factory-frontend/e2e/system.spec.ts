@@ -108,7 +108,7 @@ test("Overview, Monitoring, Analytics, alerts and Assistant expose focused evide
     page.getByText("Confirmed downtime", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("link", { name: /Open incidents/ }),
+    page.getByRole("heading", { name: "Needs attention", exact: true }),
   ).toBeVisible();
   await navigate(page, "Monitoring");
   await expect(page.getByLabel("Search sources")).toBeVisible();
