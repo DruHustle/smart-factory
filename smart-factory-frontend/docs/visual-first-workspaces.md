@@ -1,6 +1,6 @@
 # Graphical workspaces and navigation correction
 
-27 October 2026. This review covers the graphical implementation, not physical commissioning. See the [before/after gallery and recordings](evidence/visual-first/README.md).
+27 October 2026. This review covers the graphical implementation, not physical commissioning. See the before/after gallery and recordings (retained locally).
 
 ## Recovered journeys and distinct representations
 
@@ -16,7 +16,7 @@ An individual item's linked-model preview loads automatically when opened and ha
 
 ## Released interaction and graphics update - 30 October 2026
 
-The floor now uses direct hand grabbing for items and empty-floor panning, with compact labelled icon controls and fullscreen. Original GLB material groups retain steel, painted surfaces, glass and rubber; environment reflections, floor finishes and adaptive shadows ground the equipment. The supported plan remains available when WebGL cannot render. See [factory layout gestures](factory-layouts.md) and the [current production gallery](evidence/release-20261030/README.md). The older screenshots below record their original revisions.
+The floor now uses direct hand grabbing for items and empty-floor panning, with compact labelled icon controls and fullscreen. Original GLB material groups retain steel, painted surfaces, glass and rubber; environment reflections, floor finishes and adaptive shadows ground the equipment. The supported plan remains available when WebGL cannot render. See [factory layout gestures](factory-layouts.md) and the current production gallery (retained locally). The older screenshots below record their original revisions.
 
 ## Brand, motion and access
 

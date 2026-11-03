@@ -12,6 +12,6 @@ Maintained diagrams live with their explanations in the canonical guides. The SV
 
 ![OPC UA FX and TSN communication and monitoring boundaries](docs/diagrams/fx-tsn.png)
 
-The [30 October screenshot gallery](docs/evidence/release-20261030/README.md) records the released light/dark/mobile factory, equipment graphics and FX/TSN demonstration. Dated older galleries remain historical evidence.
+The 30 October screenshot gallery (retained locally) records the released light/dark/mobile factory, equipment graphics and FX/TSN demonstration. Dated older galleries remain historical evidence.
 
 Use the [Oracle/Vercel deployment runbook](deploy/oracle/README.md) for qualification, API-first release and rollback. Kubernetes and Render configurations remain historical references outside the supported production release.

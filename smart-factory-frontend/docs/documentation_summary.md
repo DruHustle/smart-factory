@@ -15,7 +15,7 @@ The README and focused guides are the source of truth for the current three-repo
 - Editable, resettable demonstrations: [sandbox guide](editable-demo.md)
 - Assistant explanations and context: [assistant guide](assistant.md), [concepts](assistant-concepts.md)
 - Digital passport publication and printing: [access guide](access-and-publication.md)
-- Current screenshots: [30 October gallery](evidence/release-20261030/README.md)
+- Current screenshots: 30 October gallery (retained locally)
 - Downloadable diagram images: [system diagrams](../SYSTEM_DIAGRAMS.md)
 - AutomationML boundary: [integration notes](automationml-integration.md)
 

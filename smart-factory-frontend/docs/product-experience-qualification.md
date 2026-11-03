@@ -14,7 +14,7 @@ Completed journeys include Overview → inventory → contextual telemetry/AAS/3
 
 ## Rendered evidence
 
-See the [before/after gallery](evidence/product-experience/README.md). Every capture uses isolated synthetic data; metadata records its source, theme, width and dataset. Current/stale/offline labels reflect the fixture's recorded observation semantics. The illustrative reference pictures were not used as engineering data.
+See the before/after gallery (retained locally). Every capture uses isolated synthetic data; metadata records its source, theme, width and dataset. Current/stale/offline labels reflect the fixture's recorded observation semantics. The illustrative reference pictures were not used as engineering data.
 
 The full 12-case rendered matrix passed at 360/390/768/1024/1440 pixels in both themes, with named controls, keyboard focus, no horizontal overflow, useful stale/empty states and resolved-token contrast checks. A further four desktop/mobile cases passed after the final Assistant source-attribution correction. The 200% checks emulate the corresponding 720-CSS-pixel layout at device scale 2; they do not claim physical browser-chrome zoom or mobile GPU qualification.
 
@@ -63,7 +63,7 @@ The qualified API/bundle source is frontend `6f4475b2d3efee148e77dcf83ffe7437bd2
 - Actual simulated/replay equipment path: 20 samples persisted during receiver outage, then 20 acknowledged with zero quarantine; modes and original UTC acquisition metadata retained.
 - Both real broker proofs dump only owned synthetic dashboard/telemetry databases, restore into fresh disposable databases, compare row identities/evidence/migration ledgers, and restart services against the restored stores. No dump, spool, cookie or private payload is committed.
 
-See the [machine-readable evidence](evidence/product-experience/qualification/README.md) for exact sources, image, restore hashes, performance plan, audit and runtime results. CI links and final acceptance results are recorded there.
+See the machine-readable evidence (retained locally) for exact sources, image, restore hashes, performance plan, audit and runtime results. CI links and final acceptance results are recorded there.
 
 ## Operating boundaries
 

@@ -36,14 +36,14 @@ General-suite skips are runner boundaries rather than waived failures: native eq
 
 ## Rendered evidence
 
-The [evidence directory](evidence/workspace-20261026/) contains actual Chromium renders and a machine-readable qualification manifest. Inventory was inspected in both actual themes at 360, 390, 768 and 1440 CSS pixels. Additional AAS, security and WebGL equipment screens cover 390px dark and 1440px light. Captures wait for loaded records, settled theme and the renderer's ready state. Checks cover page overflow, meaningful search-field width, mobile drawer dismissal/focus, keyboard navigation and controls; raw identifiers remain copyable.
+The evidence directory (retained locally) contains actual Chromium renders and a machine-readable qualification manifest. Inventory was inspected in both actual themes at 360, 390, 768 and 1440 CSS pixels. Additional AAS, security and WebGL equipment screens cover 390px dark and 1440px light. Captures wait for loaded records, settled theme and the renderer's ready state. Checks cover page overflow, meaningful search-field width, mobile drawer dismissal/focus, keyboard navigation and controls; raw identifiers remain copyable.
 
-- [360px light inventory](evidence/workspace-20261026/inventory-light-360.png)
-- [1440px dark inventory](evidence/workspace-20261026/inventory-dark-1440.png)
-- [390px imported AAS](evidence/workspace-20261026/aas-dark-390.png)
-- [390px security](evidence/workspace-20261026/security-dark-390.png)
-- [1440px equipment](evidence/workspace-20261026/equipment-light-1440.png)
-- [Inventory service error](evidence/workspace-20261026/inventory-error.png)
+- 360px light inventory (retained locally)
+- 1440px dark inventory (retained locally)
+- 390px imported AAS (retained locally)
+- 390px security (retained locally)
+- 1440px equipment (retained locally)
+- Inventory service error (retained locally)
 
 The bundled pump/motor remains illustrative revision 4 (`cb1d547822ae954d698ae330ee6d2083fa966f6af3aec889c4605c1305d29712`, 6,421,020 bytes, 186,236 triangles, 87 selectable entries). No geometry or existing component identity was regenerated. Physical mobile-device performance and externally owned consumer acceptance are not inferred from software-rendered Chromium tests.
 

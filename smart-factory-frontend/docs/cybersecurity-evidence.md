@@ -28,17 +28,17 @@ An earlier local general-suite attempt timed out in the unchanged model-import p
 
 ## Rendered evidence
 
-The screenshot [manifest](evidence/security-20261026/manifest.json) records source revisions and checksums. Captures use synthetic local fixture identities and contain no source credential or session cookie.
+The screenshot manifest (retained locally) records source revisions and checksums. Captures use synthetic local fixture identities and contain no source credential or session cookie.
 
-- [Desktop light](evidence/security-20261026/overview-light-1440.png), [desktop dark](evidence/security-20261026/overview-dark-1440.png).
-- [Narrow light](evidence/security-20261026/overview-light-390.png), [narrow dark](evidence/security-20261026/overview-dark-390.png).
-- [Persisted investigation](evidence/security-20261026/investigation-dark.png), [explicit mapped component focus](evidence/security-20261026/mapped-equipment-security.png).
+- Desktop light (retained locally), desktop dark (retained locally).
+- Narrow light (retained locally), narrow dark (retained locally).
+- Persisted investigation (retained locally), explicit mapped component focus (retained locally).
 
 ## Hosted state and remaining acceptance
 
-The tested Oracle image was deployed using the canonical API-first/single-worker procedure. Both containers became healthy, all four API and two worker processes run in their intended roles, the public API passed readiness and authenticated security/asset/notification reads and logout, and the original environment files/MQTT client identity were preserved. The final read-only database check confirmed two native sources, nine active rules and actual live Node health receipt; [only aggregate counts/times](evidence/security-20261026/production-native.json) were recorded. The pre-feature image `smart-factory-backend:oracle-20261016` and the original owner-only selection backup in `releases/security-20261026/environment.before.env` remain the rollback baseline. Intermediate qualification images are not the approved rollback target.
+The tested Oracle image was deployed using the canonical API-first/single-worker procedure. Both containers became healthy, all four API and two worker processes run in their intended roles, the public API passed readiness and authenticated security/asset/notification reads and logout, and the original environment files/MQTT client identity were preserved. The final read-only database check confirmed two native sources, nine active rules and actual live Node health receipt; only aggregate counts/times (retained locally) were recorded. The pre-feature image `smart-factory-backend:oracle-20261016` and the original owner-only selection backup in `releases/security-20261026/environment.before.env` remain the rollback baseline. Intermediate qualification images are not the approved rollback target.
 
-Production's pre-existing `ENABLE_DEMO_DATA=false` setting remains off. Its shared viewer session is read-only and sees an honest empty demo-only security/equipment scope; no private live security evidence was exposed to populate the public view. [The API proof](evidence/security-20261026/production-api.json) records this boundary. The complete private workflow and labelled authored simulation/replay are demonstrated in the isolated qualification, not fabricated as live factory incidents.
+Production's pre-existing `ENABLE_DEMO_DATA=false` setting remains off. Its shared viewer session is read-only and sees an honest empty demo-only security/equipment scope; no private live security evidence was exposed to populate the public view. The API proof (retained locally) records this boundary. The complete private workflow and labelled authored simulation/replay are demonstrated in the isolated qualification, not fabricated as live factory incidents.
 
 Track the final checked main/Vercel workflow and deployed UI identity in [frontend release PR #4](https://github.com/DruHustle/smart-factory-frontend/pull/4); deployment follows successful exact-revision main CI. Backend [PR #4](https://github.com/DruHustle/smart-factory-backend/pull/4) and gateway [PR #3](https://github.com/DruHustle/smart-factory-edge/pull/3) record their merges and CI.
 
