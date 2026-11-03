@@ -25,7 +25,7 @@ flowchart TB
   S[Four labelled demo scenarios] -->|Simulated browser experience| U
 ```
 
-The diagram describes supported boundaries, not an installed controller network. FX data connections and TSN timing stay on the factory LAN. The cloud receives diagnostic summaries; the separate polling/MQTT path does not establish an FX connection or a hardware deadline. Download the [SVG](diagrams/fx-tsn.svg), [PNG](diagrams/fx-tsn.png) or [PDF guide](fx-tsn.pdf). See the [current workspace screenshot](evidence/release-20261030/README.md).
+The diagram describes supported boundaries, not an installed controller network. FX data connections and TSN timing stay on the factory LAN. The cloud receives diagnostic summaries; the separate polling/MQTT path does not establish an FX connection or a hardware deadline. Download the [SVG](diagrams/fx-tsn.svg), [PNG](diagrams/fx-tsn.png) or [PDF guide](fx-tsn.pdf). See the [current workspace screenshot](release-evidence.md).
 
 ## Product workflow
 
