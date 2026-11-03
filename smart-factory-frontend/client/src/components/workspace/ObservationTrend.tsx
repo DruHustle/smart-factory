@@ -63,7 +63,7 @@ export function ObservationTrend({
 }) {
   const { user } = useAuth();
   const dashboardTimeZone = useDashboardTimeZone();
-  const timeZone = dashboard ? (dashboardTimeZone ?? "UTC") : "UTC";
+  const timeZone = dashboardTimeZone ?? "UTC";
   const investigationSupported = useRuntimeCapability(
     "ot-investigation-context-v1",
   );
