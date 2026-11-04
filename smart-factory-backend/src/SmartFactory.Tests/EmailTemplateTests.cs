@@ -27,9 +27,9 @@ public class EmailTemplateTests
         Assert.Contains("Reset your password", html);
         Assert.Contains("This link expires soon.", html);
         var foreign = EmailTemplate.Render("Reset", "https://attacker.example/#/reset-password?token=" + new string('a', 43), -2);
-        Assert.DoesNotContain("href=", foreign);
+        Assert.Equal(["href=\"mailto:info@onesa.eu\""], System.Text.RegularExpressions.Regex.Matches(foreign, "href=\"[^\"]*\"").Select(m => m.Value));
         var malformed = EmailTemplate.Render("Reset", link + "\" onclick=\"attack()", -3);
-        Assert.DoesNotContain("href=", malformed);
+        Assert.Equal(["href=\"mailto:info@onesa.eu\""], System.Text.RegularExpressions.Regex.Matches(malformed, "href=\"[^\"]*\"").Select(m => m.Value));
     }
 
     [Fact]
@@ -45,6 +45,11 @@ public class EmailTemplateTests
         using var payload = JsonDocument.Parse(handler.Body!);
         Assert.Equal("Pump A requires review.\nNo action has been taken.", payload.RootElement.GetProperty("text").GetString());
         Assert.Contains("Equipment update", payload.RootElement.GetProperty("html").GetString());
+        var logo = payload.RootElement.GetProperty("attachments").EnumerateArray().Single();
+        Assert.Equal(EmailBrand.ContentId, logo.GetProperty("content_id").GetString());
+        Assert.Equal(EmailBrand.Base64, logo.GetProperty("content").GetString());
+        Assert.Equal("image/png", logo.GetProperty("content_type").GetString());
+        Assert.Contains("cid:" + EmailBrand.ContentId, payload.RootElement.GetProperty("html").GetString());
         Assert.Equal("smart-factory-notification/82", handler.Identity);
     }
 

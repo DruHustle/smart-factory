@@ -44,11 +44,17 @@ public sealed class SesMailSender : IEmailSender
     {
         if (!Configured || !Allows(recipient))
             throw new InvalidOperationException("SES delivery is not configured or the recipient is not allowed.");
+        using var brand = new MemoryStream(Convert.FromBase64String(EmailBrand.Base64));
         await client.SendEmailAsync(new SendEmailRequest {
             FromEmailAddress = sender,
             Destination = new Destination { ToAddresses = [recipient] },
             Content = new EmailContent { Simple = new Message {
                 Subject = new Content { Data = title, Charset = "UTF-8" },
+                Attachments = [new Amazon.SimpleEmailV2.Model.Attachment {
+                    FileName = EmailBrand.FileName, ContentId = EmailBrand.ContentId,
+                    ContentType = "image/png", ContentDisposition = AttachmentContentDisposition.INLINE,
+                    ContentTransferEncoding = AttachmentContentTransferEncoding.BASE64, RawContent = brand,
+                }],
                 Body = new Body {
                     Text = new Content { Data = body, Charset = "UTF-8" },
                     Html = new Content { Data = EmailTemplate.Render(title, body, notificationId, webOrigin), Charset = "UTF-8" },
