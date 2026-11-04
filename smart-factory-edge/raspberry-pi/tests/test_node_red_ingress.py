@@ -41,7 +41,7 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
             self.assertEqual(load_settings().node_red_source_ids, ("node-red-source-01",))
         for invalid in [
             {"NODE_RED_SOURCE_IDS": "unknown"},
-            {"NODE_RED_APPROVED_LIVE_IDS": "node-red-source-01"},
+            {"NODE_RED_APPROVED_LIVE_IDS": "unknown"},
             {"NODE_RED_SOURCE_IDS": "node-red-source-01",
              "LOCAL_MQTT_CONTROL_DEVICE_IDS": "node-red-source-01"},
         ]:
