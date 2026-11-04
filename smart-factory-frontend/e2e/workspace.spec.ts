@@ -6,6 +6,7 @@ import {
 } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { selectSection, setTheme } from "./experience-helpers";
+import { signInToOverview, withRpcResult } from "./readiness-helpers";
 const password = "Synthetic-security-only-2026!";
 async function call(
   r: APIRequestContext,
@@ -26,14 +27,16 @@ async function login(page: Page, role = "admin") {
   await page.goto("/#/login");
   await page.getByLabel("Email").fill(`security-${role}@example.test`);
   await page.getByLabel("Password", { exact: true }).fill(password);
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await signInToOverview(page, `security-${role}@example.test`);
   // The authenticated landing view includes cold software-GPU scene setup.
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible({ timeout: 15000 });
 }
 async function inventory(page: Page, search = "Workspace") {
-  await page.goto("/#/inventory?search=" + encodeURIComponent(search));
+  await withRpcResult(page, "inventory.list", () =>
+    page.goto("/#/inventory?search=" + encodeURIComponent(search)),
+  );
   await expect(
     page.getByRole("heading", { name: "Assets & devices", exact: true }),
   ).toBeVisible();
@@ -42,11 +45,13 @@ async function inventory(page: Page, search = "Workspace") {
   ).toBeVisible();
 }
 async function open(page: Page, name: string) {
-  await page
-    .getByRole("link", { name, exact: true })
-    .filter({ visible: true })
-    .first()
-    .click();
+  await withRpcResult(page, "inventory.item", () =>
+    page
+      .getByRole("link", { name, exact: true })
+      .filter({ visible: true })
+      .first()
+      .click(),
+  );
   await expect(page.getByRole("heading", { name, exact: true })).toBeVisible();
 }
 test.describe("unified item workspace", () => {
