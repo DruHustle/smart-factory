@@ -205,6 +205,11 @@ test("mobile scenario investigation preserves the same equipment references and 
     .getByRole("link", { name: "Ask about this scenario" })
     .click();
   await expect(page).toHaveURL(/#\/assistant\?/);
+  // The hash changes before the lazy workspace mounts. Require the requested
+  // page before checking the investigation that its mount applies.
+  await expect(
+    page.getByRole("heading", { name: "Assistant", exact: true, level: 1 }),
+  ).toBeVisible();
   const assistantQuery = new URLSearchParams(
     new URL(page.url()).hash.split("?")[1],
   );

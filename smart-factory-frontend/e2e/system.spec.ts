@@ -35,6 +35,26 @@ async function loginAs(
   ).toBeVisible();
 }
 
+async function assignIncidentToEngineer(page: import("@playwright/test").Page) {
+  const downtime = page.getByRole("button", {
+    name: "Record downtime",
+    exact: true,
+  });
+  const resolve = page.getByRole("button", { name: "Resolve", exact: true });
+  // Each incident attempt starts unassigned. Establish ownership through the
+  // real authorized UI before exercising mutations or their pending interlock.
+  await expect(downtime).toBeDisabled();
+  await expect(resolve).toBeDisabled();
+  await page
+    .getByLabel("Assign technician or engineer")
+    .selectOption({ label: "Local security engineer" });
+  await expect(
+    page.getByText("Assignment updated", { exact: true }),
+  ).toBeVisible();
+  await expect(downtime).toBeEnabled();
+  await expect(resolve).toBeEnabled();
+}
+
 test("account routes and the signed-out flow render", async ({ page }) => {
   await page.goto("/#/login");
   await expect(
@@ -270,12 +290,7 @@ incidentTest(
     await expect(
       page.getByRole("heading", { name: incident.message, exact: true }),
     ).toBeVisible();
-    await page
-      .getByLabel("Assign technician or engineer")
-      .selectOption({ label: "Local security engineer" });
-    await expect(
-      page.getByText("Assignment updated", { exact: true }),
-    ).toBeVisible();
+    await assignIncidentToEngineer(page);
     await page.getByText("Add follow-up action", { exact: true }).click();
     await page.getByLabel("Action title").fill("Inspect the service assembly");
     await page
@@ -371,6 +386,7 @@ incidentTest(
         exact: true,
       }),
     ).toBeVisible();
+    await assignIncidentToEngineer(page);
     await page.getByLabel("Update type").selectOption("finding");
     await page
       .getByLabel("Record investigation update")
@@ -416,6 +432,12 @@ incidentTest(
       "",
     );
     await expect(page.getByLabel("Record investigation update")).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Record downtime", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Resolve", exact: true }),
+    ).toBeEnabled();
     await page.unroute("**/api/trpc/alerts.addNote**");
     await page.getByLabel("Update type").selectOption("next_step");
     await page
@@ -461,6 +483,7 @@ incidentTest(
         exact: true,
       }),
     ).toBeVisible();
+    await assignIncidentToEngineer(page);
     await page
       .getByRole("button", { name: "Record downtime", exact: true })
       .click();
@@ -999,7 +1022,12 @@ test("individual administrator provisions an AAS asset and preserves its gateway
   await page.getByLabel("Manufacturer order code").fill("E2E-COMP-001");
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByText("Not connected yet").click();
-  await page.getByRole("option", { name: gatewayName, exact: true }).click();
+  await page
+    .getByRole("option", {
+      name: `${gatewayName} · ${gatewayId}`,
+      exact: true,
+    })
+    .click();
   await page.getByLabel("Machine endpoint").fill("opc.tcp://127.0.0.1:4840");
   for (let step = 0; step < 2; step++)
     await page.getByRole("button", { name: "Next", exact: true }).click();
