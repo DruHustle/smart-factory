@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { getDb, getAlertById } from "./db";
 import { TRPCError } from "@trpc/server";
 import type { IncidentNoteCategory } from "../shared/incidentNotes";
+import { publishAutomationEvent } from "./automation";
 export async function incidentHistory(id: number, after = 0) {
   if (!(await getAlertById(id)))
     throw new TRPCError({ code: "NOT_FOUND", message: "Incident unavailable" });
@@ -52,7 +53,7 @@ export async function addIncidentNote(
   if (!(await getAlertById(id)))
     throw new TRPCError({ code: "NOT_FOUND", message: "Incident unavailable" });
   const db = (await getDb())!;
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx.execute(sql`select id from alerts where id=${id} for update`);
     const [count] = await tx.execute(
       sql`select count(*)::int as n from incident_activity where alert_id=${id} and kind='note'`,
@@ -68,4 +69,11 @@ export async function addIncidentNote(
     );
     return { id: Number(row.id) };
   });
+  void publishAutomationEvent("incident.note.added", {
+    incidentId: id,
+    activityId: result.id,
+    actorId,
+    category,
+  });
+  return result;
 }

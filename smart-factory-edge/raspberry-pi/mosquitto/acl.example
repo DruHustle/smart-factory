@@ -14,3 +14,9 @@ topic write factory/factory-a/line-1/esp32-wrover-01/heartbeat
 # Enable only for a commissioned WROVER output device.
 # topic read factory/factory-a/line-1/esp32-wrover-01/commands
 # topic write factory/factory-a/line-1/esp32-wrover-01/control-ack
+
+# Add an independent Node-RED MQTT credential only after the related
+# NODE_RED_SOURCE_IDS entry has been commissioned in Python.
+# This role cannot publish heartbeat/control-ack or receive machine commands.
+user node-red-source-01
+topic write factory/factory-a/line-1/node-red-source-01/telemetry

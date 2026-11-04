@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { automationStatus } from "./automation";
 import { getDb } from "./db";
 import { visibleRecordSql } from "./demoData";
 export async function auditPage(page: number, search: string) {
@@ -42,5 +43,6 @@ export async function connectionSummary() {
     profiles: rows,
     aasProvisioningConfigured: !!process.env.AAS_PROVISIONING_API_URL,
     onesaEnabled: process.env.ONESA_ENABLED === "true",
+    automation: automationStatus(),
   };
 }
