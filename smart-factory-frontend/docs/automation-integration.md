@@ -21,4 +21,4 @@ disabled until explicitly configured and qualified.
 
 The protocol source is commissioned and authorized independently of the cloud client. Node-RED receives only locally scoped broker permissions, and Python retains identity verification, mapping validation, durable MQTT transport, cyber evidence, and command policy. A flow's output does not establish physical measurement or machine actuation. Activepieces is an optional non-authoritative event consumer; its publisher is best effort rather than a guaranteed durable outbox. Keep automation disabled until reviewed credentials, TLS/ACLs, and recovery tests are qualified.
 
-See the [Node-RED edge runbook](../../../smart-factory-edge/deploy/node-red/README.md), [Activepieces deployment runbook](../deploy/automation/activepieces/README.md), and [main architecture](architecture.md).
+See the [Node-RED edge runbook](../../smart-factory-edge/deploy/node-red/README.md), [Activepieces deployment runbook](../deploy/automation/activepieces/README.md), and [main architecture](architecture.md).
