@@ -1,0 +1,97 @@
+name: Factory ARM64 service bundle qualification
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-arm64-bundle-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  bundle:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+        working-directory: candidate/smart-factory-frontend
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+          path: candidate
+      - name: Bind both images to immutable canonical source trees
+        id: sources
+        env:
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          python3 - <<'PY'
+          import json,os,re,subprocess
+          from pathlib import Path
+          source=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert source==os.environ['EXPECTED_SHA'] and re.fullmatch('[a-f0-9]{40}',source)
+          record=json.loads(Path('../release/qualification.json').read_text())
+          rollback=record['rollbackRevision']
+          assert record['repository']=='DruHustle/smart-factory'
+          assert re.fullmatch('[a-f0-9]{40}',rollback) and rollback!=source
+          subprocess.run(['git','merge-base','--is-ancestor',rollback,source],check=True)
+          for component in ('frontend','backend','edge'):
+              subprocess.run(['git','cat-file','-e',rollback+':smart-factory-'+component],check=True)
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f:
+              f.write('candidate='+source+'\nrollback='+rollback+'\n')
+          PY
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ steps.sources.outputs.rollback }}
+          persist-credentials: false
+          path: rollback
+      - name: Verify isolated SMTP capture fixture
+        run: python3 -m unittest discover -s scripts/tests -p test_smtp_capture.py -v
+      - name: Verify rollback source selection
+        run: python3 -m unittest discover -s scripts/tests -p test_source_revisions.py -v
+      - name: Verify staged MQTT broker on native ARM64
+        run: |
+          python3 -m venv "$RUNNER_TEMP/mqtt-proof"
+          "$RUNNER_TEMP/mqtt-proof/bin/pip" install --require-hashes -r scripts/mqtt/requirements.txt
+          "$RUNNER_TEMP/mqtt-proof/bin/python" scripts/mqtt/broker-smoke.py
+      - name: Build native ARM64 candidate and isolated compatible rollback
+        env:
+          SOURCE_REVISION: ${{ steps.sources.outputs.candidate }}
+          ROLLBACK_SOURCE: ${{ steps.sources.outputs.rollback }}
+        run: |
+          [[ "$(uname -m)" == aarch64 ]]
+          [[ "$(git rev-parse HEAD)" == "$SOURCE_REVISION" ]]
+          [[ "$(git -C ../../rollback rev-parse HEAD)" == "$ROLLBACK_SOURCE" ]]
+          docker buildx build --platform linux/arm64 --load --build-context backend=../smart-factory-backend --build-arg SOURCE_REVISION="$SOURCE_REVISION" --build-arg BACKEND_SOURCE_REVISION="$SOURCE_REVISION" --build-arg EDGE_SOURCE_REVISION="$SOURCE_REVISION" -f deploy/render/Dockerfile -t factory-qualified:candidate .
+          docker buildx build --platform linux/arm64 --load --build-context backend=../../rollback/smart-factory-backend --build-arg SOURCE_REVISION="$ROLLBACK_SOURCE" --build-arg BACKEND_SOURCE_REVISION="$ROLLBACK_SOURCE" --build-arg EDGE_SOURCE_REVISION="$ROLLBACK_SOURCE" -f ../../rollback/smart-factory-frontend/deploy/render/Dockerfile -t factory-qualified:rollback ../../rollback/smart-factory-frontend
+      - name: Qualify six real processes, broker recovery and compatible rollback
+        env:
+          BUNDLE_IMAGE: factory-qualified:candidate
+          BUNDLE_ROLLBACK_IMAGE: factory-qualified:rollback
+          BUNDLE_SOURCE_LAYOUT: monorepo
+          BUNDLE_ROLLBACK_SOURCE_SHA: ${{ steps.sources.outputs.rollback }}
+          QUALIFICATION_EVIDENCE_DIR: test-results/arm64
+        run: python3 scripts/bundle-smoke.py
+      - name: Scan the exact local candidate without uploading application data
+        run: python3 scripts/audit-container.py factory-qualified:candidate --output test-results/arm64/container-audit.json
+      - name: Package the tested immutable images
+        run: |
+          docker image inspect factory-qualified:candidate > test-results/arm64/image.json
+          docker image inspect factory-qualified:rollback > test-results/arm64/rollback-image.json
+          docker save factory-qualified:candidate | gzip -3 > test-results/arm64/candidate.tar.gz
+          docker save factory-qualified:rollback | gzip -3 > test-results/arm64/rollback.tar.gz
+          sha256sum test-results/arm64/candidate.tar.gz test-results/arm64/rollback.tar.gz > test-results/arm64/archive.sha256
+          echo 'This artifact proves isolated candidate/rollback compatibility only. It does not prove a live deployment, a production rollback, or permission to remove legacy repositories.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: qualified-arm64-bundle
+          path: candidate/smart-factory-frontend/test-results/arm64
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

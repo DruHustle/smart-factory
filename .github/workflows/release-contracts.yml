@@ -1,0 +1,25 @@
+name: Factory release contracts
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-release-contracts-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  contracts:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - run: 'python3 -m pip install --only-binary=:all: PyYAML==6.0.3'
+      - run: python3 -m unittest discover -s scripts/tests -v
+      - run: python3 scripts/consolidate_workflows.py --check
+      - run: python3 -m unittest discover -s smart-factory-frontend/scripts/tests -p test_source_revisions.py -v
