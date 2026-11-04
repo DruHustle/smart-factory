@@ -5,6 +5,7 @@ import {
   incidentFactoryCondition,
   validateIncidentFactoryScope,
 } from "./incidentFactoryScope";
+import { publishAutomationEvent } from "./automation";
 
 type ActionStatus = "open" | "in_progress" | "completed";
 export type ActionInput = {
@@ -113,7 +114,7 @@ export async function createIncidentAction(
   actorId: number,
 ) {
   const db = await visibleIncident(input.id);
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx.execute(
       sql`select id from alerts where id=${input.id} for update`,
     );
@@ -144,6 +145,15 @@ export async function createIncidentAction(
     );
     return { id: actionId };
   });
+  void publishAutomationEvent("incident.action.created", {
+    incidentId: input.id,
+    actionId: result.id,
+    actorId,
+    ownerId: input.ownerId,
+    dueDate: input.dueDate,
+    status: "open",
+  });
+  return result;
 }
 
 export async function updateIncidentAction(
@@ -151,7 +161,7 @@ export async function updateIncidentAction(
   actorId: number,
 ) {
   const db = await visibleIncident(input.id);
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await validateOwner(tx, input.ownerId);
     const [action] = await tx.execute(sql`
       update incident_actions set owner_id=${input.ownerId}, due_date=${input.dueDate}::date,
@@ -179,4 +189,14 @@ export async function updateIncidentAction(
     );
     return { id: input.actionId, version: Number(action.version) };
   });
+  void publishAutomationEvent("incident.action.updated", {
+    incidentId: input.id,
+    actionId: input.actionId,
+    actorId,
+    ownerId: input.ownerId,
+    dueDate: input.dueDate,
+    status: input.status,
+    version: result.version,
+  });
+  return result;
 }

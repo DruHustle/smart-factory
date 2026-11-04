@@ -100,4 +100,24 @@ jobs:
       - run: python -m pip install platformio==6.2.0 pip-audit==2.10.1
       - run: python -m pip_audit -r raspberry-pi/requirements.txt --strict --progress-spinner off
       - run: PYTHONDONTWRITEBYTECODE=1 python -m unittest discover -s raspberry-pi/tests -v
+      - name: Validate optional Node-RED and Activepieces configuration
+        env:
+          NODE_RED_IMAGE: nodered/node-red:4.1.9
+          NODE_RED_CREDENTIAL_SECRET: isolated-test-only-node-red-secret-12345678
+          NODE_RED_ADMIN_USER: test-operator
+          NODE_RED_ADMIN_PASSWORD_HASH: '$2b$12$AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
+          ACTIVEPIECES_IMAGE: ghcr.io/activepieces/activepieces:0.92.2
+          AP_POSTGRES_DATABASE: isolated_automation
+          AP_POSTGRES_USERNAME: isolated_automation
+          AP_POSTGRES_PASSWORD: isolated-postgres-secret
+          AP_REDIS_PASSWORD: isolated-redis-secret
+          AP_ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+          AP_JWT_SECRET: isolated-jwt-secret-32-characters-plus
+          AP_FRONTEND_URL: https://automation.example.test
+          AP_WORKER_TOKEN: isolated-worker-token
+        run: |
+          node --check deploy/node-red/settings.js
+          python3 -m json.tool deploy/node-red/flows.example.json > /dev/null
+          docker compose -f deploy/node-red/compose.yml config --quiet
+          docker compose -f ../smart-factory-frontend/deploy/automation/activepieces/compose.yml config --quiet
       - run: pio run --project-dir esp32-wrover --environment compile-check
