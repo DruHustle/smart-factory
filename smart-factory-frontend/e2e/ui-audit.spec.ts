@@ -1,10 +1,7 @@
-import {
-  navigate,
-  addItem,
-  openItem,
-  finishGateway,
-} from "./workspace-helpers";
-import { expect, type Page, test } from "@playwright/test";
+import { navigate } from "./workspace-helpers";
+import { expect, type BrowserContext, type Page, test } from "@playwright/test";
+import { signInToOverview, withRpcResult } from "./readiness-helpers";
+import { expectNamedControls } from "./ui-audit-helpers";
 
 async function loginAs(page: Page, role: "admin" | "engineer" | "viewer") {
   await page.goto("/#/login");
@@ -12,7 +9,7 @@ async function loginAs(page: Page, role: "admin" | "engineer" | "viewer") {
   await page
     .getByLabel("Password", { exact: true })
     .fill("Synthetic-security-only-2026!");
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await signInToOverview(page, `security-${role}@example.test`);
   await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
 }
 
@@ -28,50 +25,8 @@ async function expectSoundDocumentStructure(page: Page) {
         .map((element) => element.id)
         .filter((id, index, ids) => id && ids.indexOf(id) !== index);
 
-      const controls = Array.from(
-        document.querySelectorAll<HTMLElement>(
-          "button, a[href], input:not([type='hidden']), textarea, select, [role='button'], [role='link'], [role='combobox']",
-        ),
-      );
-      const textFromIds = (ids: string) =>
-        ids
-          .split(/\s+/)
-          .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
-          .join(" ")
-          .trim();
-      const controlName = (element: HTMLElement) => {
-        const labelledBy = element.getAttribute("aria-labelledby");
-        const ownId = element.id;
-        return (
-          element.getAttribute("aria-label")?.trim() ||
-          (labelledBy ? textFromIds(labelledBy) : "") ||
-          (ownId
-            ? document
-                .querySelector<HTMLLabelElement>(
-                  `label[for="${CSS.escape(ownId)}"]`,
-                )
-                ?.textContent?.trim()
-            : "") ||
-          element.closest("label")?.textContent?.trim() ||
-          element.getAttribute("title")?.trim() ||
-          element.innerText?.trim() ||
-          ""
-        );
-      };
-      const unnamedControls = controls
-        .filter(
-          (element) =>
-            element.getAttribute("aria-hidden") !== "true" &&
-            !controlName(element),
-        )
-        .map(
-          (element) =>
-            `${element.tagName.toLowerCase()}${element.getAttribute("role") ? `[role=${element.getAttribute("role")}]` : ""}`,
-        );
-
       return {
         duplicateIds: [...new Set(duplicateIds)],
-        unnamedControls,
         mainCount: document.querySelectorAll("main").length,
         h1Count: document.querySelectorAll("h1").length,
         horizontalOverflow:
@@ -81,14 +36,14 @@ async function expectSoundDocumentStructure(page: Page) {
     });
 
     expect(audit.duplicateIds).toEqual([]);
-    expect(audit.unnamedControls).toEqual([]);
+    await expectNamedControls(page);
     expect(audit.mainCount).toBe(1);
     expect(audit.h1Count).toBeGreaterThanOrEqual(1);
     expect(audit.horizontalOverflow).toBeLessThanOrEqual(1);
   }).toPass({ timeout: 15000 });
 }
 
-test("signed-out and authenticated routes expose named controls and sound landmarks", async ({
+test("signed-out controls and password visibility expose sound semantics", async ({
   page,
 }) => {
   await page.goto("/#/login");
@@ -101,77 +56,101 @@ test("signed-out and authenticated routes expose named controls and sound landma
   await expect(password).toHaveAttribute("type", "text");
   await page.getByRole("button", { name: "Hide password" }).click();
   await expect(password).toHaveAttribute("type", "password");
-
-  await loginAs(page, "viewer");
-  const routes = [
-    ["/", "Overview"],
-    ["/monitoring", "Monitoring"],
-    ["/devices", "Assets & devices"],
-    ["/assets", "Assets & devices"],
-    ["/alerts", "Alerts"],
-    ["/notifications", "Notifications"],
-    ["/analytics", "Analytics"],
-    ["/assistant", "Assistant"],
-  ] as const;
-
-  for (const [route, heading] of routes) {
-    await page.goto(`/#${route}`);
-    await expect(
-      page.getByRole("heading", { name: heading, exact: true }),
-    ).toBeVisible();
-    await expectSoundDocumentStructure(page);
-  }
-
-  await page.goto("/#/devices");
-  await expect(
-    page.getByRole("link", { name: "Assets & devices", exact: true }),
-  ).toHaveAttribute("aria-current", "page");
-  const resizer = page.getByRole("separator", { name: "Resize navigation" });
-  const originalWidth = Number(await resizer.getAttribute("aria-valuenow"));
-  await resizer.focus();
-  await page.keyboard.press("ArrowRight");
-  await expect(resizer).toHaveAttribute(
-    "aria-valuenow",
-    String(
-      Math.min(
-        Number(await resizer.getAttribute("aria-valuemax")),
-        originalWidth + 10,
-      ),
-    ),
-  );
 });
 
-test("core operational routes remain within a mobile viewport", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await loginAs(page, "viewer");
+const routes = [
+  ["/", "Overview"],
+  ["/monitoring", "Monitoring"],
+  ["/devices", "Assets & devices"],
+  ["/assets", "Assets & devices"],
+  ["/alerts", "Alerts"],
+  ["/notifications", "Notifications"],
+  ["/analytics", "Analytics"],
+  ["/assistant", "Assistant"],
+] as const;
 
-  for (const route of [
-    "/",
-    "/monitoring",
-    "/devices",
-    "/assets",
-    "/alerts",
-    "/notifications",
-    "/analytics",
-    "/assistant",
-  ]) {
-    await page.goto(`/#${route}`);
-    await expect(page.locator("#dashboard-main")).toBeVisible();
-    await expectSoundDocumentStructure(page);
+test.describe("authenticated route audit", () => {
+  let state: Awaited<ReturnType<BrowserContext["storageState"]>>;
+  test.beforeAll(async ({ browser, baseURL }) => {
+    // Authenticate once through the real UI; each route receives a separate
+    // browser context. No rate-limit reset, bypass or shared page state.
+    const context = await browser.newContext({ baseURL });
+    try {
+      await loginAs(await context.newPage(), "viewer");
+      state = await context.storageState();
+    } finally {
+      await context.close();
+    }
+  });
+  test.use({
+    storageState: async ({}, use) => {
+      await use(state);
+    },
+  });
+
+  for (const width of [1440, 390]) {
+    for (const [route, heading] of routes) {
+      test(`${route} has named controls and sound landmarks at ${width}px`, async ({
+        page,
+      }) => {
+        await page.setViewportSize({ width, height: 844 });
+        const user = await withRpcResult(page, "auth.me", () =>
+          page.goto(`/#${route}`),
+        );
+        expect(user?.email).toBe("security-viewer@example.test");
+        await expect(page.locator("#dashboard-main")).toBeVisible();
+        await expect(
+          page.getByRole("heading", { name: heading, exact: true }),
+        ).toBeVisible();
+        await expectSoundDocumentStructure(page);
+      });
+    }
   }
 
-  const menu = page
-    .getByRole("button", { name: "Toggle navigation", exact: true })
-    .filter({ visible: true })
-    .first();
-  await menu.click();
-  await expect(
-    page.getByRole("link", { name: "Monitoring", exact: true }),
-  ).toBeVisible();
-  await navigate(page, "Monitoring");
-  await expect(
-    page.getByRole("heading", { name: "Monitoring", exact: true }),
-  ).toBeVisible();
+  test("legacy inventory selection and keyboard sidebar resizing remain accessible", async ({
+    page,
+  }) => {
+    await page.goto("/#/devices");
+    await expect(
+      page.getByRole("heading", { name: "Assets & devices", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: "Assets & devices", exact: true }),
+    ).toHaveAttribute("aria-current", "page");
+    const resizer = page.getByRole("separator", { name: "Resize navigation" });
+    const originalWidth = Number(await resizer.getAttribute("aria-valuenow"));
+    await resizer.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(resizer).toHaveAttribute(
+      "aria-valuenow",
+      String(
+        Math.min(
+          Number(await resizer.getAttribute("aria-valuemax")),
+          originalWidth + 10,
+        ),
+      ),
+    );
+  });
+
+  test("the mobile navigation drawer opens the selected destination", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/#/assistant");
+    await expect(
+      page.getByRole("heading", { name: "Assistant", exact: true }),
+    ).toBeVisible();
+    const menu = page
+      .getByRole("button", { name: "Toggle navigation", exact: true })
+      .filter({ visible: true })
+      .first();
+    await menu.click();
+    await expect(
+      page.getByRole("link", { name: "Monitoring", exact: true }),
+    ).toBeVisible();
+    await navigate(page, "Monitoring");
+    await expect(
+      page.getByRole("heading", { name: "Monitoring", exact: true }),
+    ).toBeVisible();
+  });
 });

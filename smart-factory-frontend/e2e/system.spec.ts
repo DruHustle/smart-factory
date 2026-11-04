@@ -6,9 +6,18 @@ import {
 } from "./workspace-helpers";
 import { expect, test } from "@playwright/test";
 import { selectSection } from "./experience-helpers";
+import { selectDataWorkspace, signInToOverview } from "./readiness-helpers";
 import { readFile } from "node:fs/promises";
 import { mkdirSync } from "node:fs";
 import { join } from "node:path";
+import { randomUUID } from "node:crypto";
+import { withIncidentFixture, type IncidentFixture } from "./incident-fixture";
+
+const incidentTest = test.extend<{ incident: IncidentFixture }>({
+  incident: async ({}, use) => {
+    await withIncidentFixture(use);
+  },
+});
 
 async function loginAs(
   page: import("@playwright/test").Page,
@@ -20,10 +29,30 @@ async function loginAs(
   await page
     .getByLabel("Password", { exact: true })
     .fill("Synthetic-security-only-2026!");
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await signInToOverview(page, `security-${role}@example.test`);
   await expect(
     page.getByRole("heading", { name: /^overview$/i }),
   ).toBeVisible();
+}
+
+async function assignIncidentToEngineer(page: import("@playwright/test").Page) {
+  const downtime = page.getByRole("button", {
+    name: "Record downtime",
+    exact: true,
+  });
+  const resolve = page.getByRole("button", { name: "Resolve", exact: true });
+  // Each incident attempt starts unassigned. Establish ownership through the
+  // real authorized UI before exercising mutations or their pending interlock.
+  await expect(downtime).toBeDisabled();
+  await expect(resolve).toBeDisabled();
+  await page
+    .getByLabel("Assign technician or engineer")
+    .selectOption({ label: "Local security engineer" });
+  await expect(
+    page.getByText("Assignment updated", { exact: true }),
+  ).toBeVisible();
+  await expect(downtime).toBeEnabled();
+  await expect(resolve).toBeEnabled();
 }
 
 test("account routes and the signed-out flow render", async ({ page }) => {
@@ -116,6 +145,11 @@ test("Overview, Monitoring, Analytics, alerts and Assistant expose focused evide
     page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeVisible();
   await navigate(page, "Analytics");
+  // Sidebar navigation finishes before the lazy route mounts. Establish the
+  // page boundary before checking its resolved measurement state.
+  await expect(
+    page.getByRole("heading", { name: "Analytics", exact: true, level: 1 }),
+  ).toBeVisible();
   await expect(
     page.getByText("No verified measurements in this period", { exact: true }),
   ).toBeVisible();
@@ -247,169 +281,235 @@ test("incident review falls back to uncategorized notes with an older API", asyn
   await expect(page.getByText("Fallback review note.")).toBeVisible();
 });
 
-test("engineers assign incidents, explicitly confirm downtime, record notes and resolve", async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1024, height: 900 });
-  await loginAs(page, "engineer");
-  await page.goto("/#/alerts?search=E2E%20service%20review%20due");
-  await page
-    .getByRole("link")
-    .filter({ hasText: "E2E service review due" })
-    .first()
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "E2E service review due", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByLabel("Assign technician or engineer")
-    .selectOption({ label: "Local security engineer" });
-  await expect(
-    page.getByText("Assignment updated", { exact: true }),
-  ).toBeVisible();
-  await page.getByText("Add follow-up action", { exact: true }).click();
-  await page.getByLabel("Action title").fill("Inspect the service assembly");
-  await page
-    .getByLabel("Action owner")
-    .selectOption({ label: "Local security engineer" });
-  await page.getByLabel("Action due date").fill("2026-12-10");
-  await page
-    .getByRole("button", { name: "Create action", exact: true })
-    .click();
-  await expect(page.getByText("Action created", { exact: true })).toBeVisible();
-  await page.goto("/#/");
-  await page.getByText("Follow-up · 1", { exact: true }).click();
-  await page
-    .getByRole("link", { name: /Inspect the service assembly/ })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "E2E service review due", exact: true }),
-  ).toBeVisible();
-  await page.getByText("Inspect the service assembly", { exact: true }).click();
-  await page
-    .getByLabel("Status for Inspect the service assembly")
-    .selectOption("completed");
-  await page
-    .getByLabel("Outcome for Inspect the service assembly")
-    .fill("Inspection completed; the observed pressure was stable.");
-  await page.getByRole("button", { name: "Save action", exact: true }).click();
-  await expect(page.getByText("Action updated", { exact: true })).toBeVisible();
-  await page.reload();
-  await page.getByText("Inspect the service assembly", { exact: true }).click();
-  await expect(
-    page.getByLabel("Outcome for Inspect the service assembly"),
-  ).toHaveValue("Inspection completed; the observed pressure was stable.");
-  await expect(page.getByText("Review: active", { exact: true })).toBeVisible();
-  if (process.env.OT_EVIDENCE_DIR) {
-    mkdirSync(process.env.OT_EVIDENCE_DIR, { recursive: true });
-    await page.getByLabel("Incident actions").screenshot({
-      path: join(process.env.OT_EVIDENCE_DIR, "incident-action.png"),
-      animations: "disabled",
+incidentTest(
+  "engineers assign incidents and persist follow-up actions and notifications",
+  async ({ page, incident }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await loginAs(page, "engineer");
+    await page.goto("/#/alerts?search=" + encodeURIComponent(incident.message));
+    await page
+      .getByRole("link")
+      .filter({ hasText: incident.message })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", { name: incident.message, exact: true }),
+    ).toBeVisible();
+    await assignIncidentToEngineer(page);
+    await page.getByText("Add follow-up action", { exact: true }).click();
+    await page.getByLabel("Action title").fill("Inspect the service assembly");
+    await page
+      .getByLabel("Action owner")
+      .selectOption({ label: "Local security engineer" });
+    await page.getByLabel("Action due date").fill("2026-12-10");
+    await page
+      .getByRole("button", { name: "Create action", exact: true })
+      .click();
+    await expect(
+      page.getByText("Action created", { exact: true }),
+    ).toBeVisible();
+    await page.goto("/#/");
+    await page.getByText("Follow-up · 1", { exact: true }).click();
+    await page
+      .getByRole("link", { name: /Inspect the service assembly/ })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: incident.message, exact: true }),
+    ).toBeVisible();
+    await page
+      .getByText("Inspect the service assembly", { exact: true })
+      .click();
+    await page
+      .getByLabel("Status for Inspect the service assembly")
+      .selectOption("completed");
+    await page
+      .getByLabel("Outcome for Inspect the service assembly")
+      .fill("Inspection completed; the observed pressure was stable.");
+    await page
+      .getByRole("button", { name: "Save action", exact: true })
+      .click();
+    await expect(
+      page.getByText("Action updated", { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await page
+      .getByText("Inspect the service assembly", { exact: true })
+      .click();
+    await expect(
+      page.getByLabel("Outcome for Inspect the service assembly"),
+    ).toHaveValue("Inspection completed; the observed pressure was stable.");
+    await expect(
+      page.getByText("Review: active", { exact: true }),
+    ).toBeVisible();
+    if (process.env.OT_EVIDENCE_DIR) {
+      mkdirSync(process.env.OT_EVIDENCE_DIR, { recursive: true });
+      await page.getByLabel("Incident actions").screenshot({
+        path: join(process.env.OT_EVIDENCE_DIR, "incident-action.png"),
+        animations: "disabled",
+      });
+    }
+    await navigate(page, "Notifications");
+    await page
+      .getByLabel("Search notifications")
+      .fill("Technician assignment changed");
+    const update = page
+      .getByRole("listitem")
+      .filter({
+        has: page.getByRole("heading", {
+          name: "Technician assignment changed",
+          exact: true,
+        }),
+      })
+      .first();
+    await expect(update).toBeVisible();
+    await expect(
+      update.getByText(/Email queued|Email not configured/),
+    ).toBeVisible();
+    await update
+      .getByRole("link", { name: "Open process incident", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: incident.message, exact: true }),
+    ).toBeVisible();
+  },
+);
+
+incidentTest(
+  "incident updates interlock competing actions and persist categorized findings and next steps",
+  async ({ page, incident }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await loginAs(page, "engineer");
+    await page.goto("/#/alerts?search=" + encodeURIComponent(incident.message));
+    await page
+      .getByRole("link")
+      .filter({ hasText: incident.message })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: incident.message,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await assignIncidentToEngineer(page);
+    await page.getByLabel("Update type").selectOption("finding");
+    await page
+      .getByLabel("Record investigation update")
+      .fill("Synthetic service inspection; physical cause is not established.");
+    let releaseNote!: () => void;
+    const noteReceipt = new Promise<void>((resolve) => {
+      releaseNote = resolve;
     });
-  }
-  await page.getByLabel("Update type").selectOption("finding");
-  await page
-    .getByLabel("Record investigation update")
-    .fill("Synthetic service inspection; physical cause is not established.");
-  let releaseNote!: () => void;
-  const noteReceipt = new Promise<void>((resolve) => {
-    releaseNote = resolve;
-  });
-  await page.route("**/api/trpc/alerts.addNote**", async (route) => {
-    const response = await route.fetch();
-    await noteReceipt;
-    await route.fulfill({ response });
-  });
-  try {
+    await page.route("**/api/trpc/alerts.addNote**", async (route) => {
+      const response = await route.fetch();
+      await noteReceipt;
+      await route.fulfill({ response });
+    });
+    try {
+      await page
+        .getByRole("button", { name: "Save update", exact: true })
+        .click();
+      await expect(
+        page.getByLabel("Record investigation update"),
+      ).toBeDisabled();
+      await expect(
+        page.getByLabel("Assign technician or engineer"),
+      ).toBeDisabled();
+      await expect(
+        page.getByRole("button", { name: "Record downtime", exact: true }),
+      ).toBeDisabled();
+      await expect(
+        page.getByRole("button", { name: "Resolve", exact: true }),
+      ).toBeDisabled();
+    } finally {
+      releaseNote();
+    }
+    await expect(
+      page
+        .locator("p")
+        .filter({
+          hasText:
+            /^Synthetic service inspection; physical cause is not established\.$/,
+        })
+        .first(),
+    ).toBeVisible();
+    await expect(page.getByLabel("Record investigation update")).toHaveValue(
+      "",
+    );
+    await expect(page.getByLabel("Record investigation update")).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Record downtime", exact: true }),
+    ).toBeEnabled();
+    await expect(
+      page.getByRole("button", { name: "Resolve", exact: true }),
+    ).toBeEnabled();
+    await page.unroute("**/api/trpc/alerts.addNote**");
+    await page.getByLabel("Update type").selectOption("next_step");
+    await page
+      .getByLabel("Record investigation update")
+      .fill("Inspect the service assembly on the next shift.");
     await page
       .getByRole("button", { name: "Save update", exact: true })
       .click();
-    await expect(page.getByLabel("Record investigation update")).toBeDisabled();
-    await expect(page.getByLabel("Assign technician or engineer")).toBeDisabled();
+    await expect(page.getByLabel("Record investigation update")).toHaveValue(
+      "",
+    );
     await expect(
-      page.getByRole("button", { name: "Record downtime", exact: true }),
-    ).toBeDisabled();
+      page
+        .locator("li")
+        .getByText("Inspect the service assembly on the next shift."),
+    ).toBeVisible();
+    await page.reload();
     await expect(
-      page.getByRole("button", { name: "Resolve", exact: true }),
-    ).toBeDisabled();
-  } finally {
-    releaseNote();
-  }
-  await expect(
-    page
-      .locator("p")
-      .filter({
-        hasText:
-          /^Synthetic service inspection; physical cause is not established\.$/,
-      })
-      .first(),
-  ).toBeVisible();
-  await expect(page.getByLabel("Record investigation update")).toHaveValue("");
-  await expect(page.getByLabel("Record investigation update")).toBeEnabled();
-  await page.unroute("**/api/trpc/alerts.addNote**");
-  await page.getByLabel("Update type").selectOption("next_step");
-  await page
-    .getByLabel("Record investigation update")
-    .fill("Inspect the service assembly on the next shift.");
-  await page.getByRole("button", { name: "Save update", exact: true }).click();
-  await expect(page.getByLabel("Record investigation update")).toHaveValue("");
-  await expect(
-    page
-      .locator("li")
-      .getByText("Inspect the service assembly on the next shift."),
-  ).toBeVisible();
-  await page.reload();
-  await expect(
-    page.getByText("Inspect the service assembly on the next shift."),
-  ).toBeVisible();
-  await expect(
-    page.getByText(
-      "Synthetic service inspection; physical cause is not established.",
-    ),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Record downtime", exact: true })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Confirm factory downtime" }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Confirm downtime", exact: true })
-    .click();
-  await expect(page.getByText(/^Confirmed downtime started/)).toBeVisible();
-  await page.getByRole("button", { name: "Resolve", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Confirm resolution", exact: true })
-    .click();
-  await expect(
-    page.getByText("Incident resolved", { exact: true }),
-  ).toBeVisible();
-  await page.reload();
-  await expect(page.getByText(/^Resolved /).first()).toBeVisible();
-  await navigate(page, "Notifications");
-  await page
-    .getByLabel("Search notifications")
-    .fill("Technician assignment changed");
-  const update = page
-    .getByRole("listitem")
-    .filter({
-      has: page.getByRole("heading", {
-        name: "Technician assignment changed",
+      page.getByText("Inspect the service assembly on the next shift."),
+    ).toBeVisible();
+    await expect(
+      page.getByText(
+        "Synthetic service inspection; physical cause is not established.",
+      ),
+    ).toBeVisible();
+  },
+);
+
+incidentTest(
+  "engineers explicitly confirm downtime and persist incident resolution",
+  async ({ page, incident }) => {
+    await page.setViewportSize({ width: 1024, height: 900 });
+    await loginAs(page, "engineer");
+    await page.goto("/#/alerts?search=" + encodeURIComponent(incident.message));
+    await page
+      .getByRole("link")
+      .filter({ hasText: incident.message })
+      .first()
+      .click();
+    await expect(
+      page.getByRole("heading", {
+        name: incident.message,
         exact: true,
       }),
-    })
-    .first();
-  await expect(update).toBeVisible();
-  await expect(
-    update.getByText(/Email queued|Email not configured/),
-  ).toBeVisible();
-  await update
-    .getByRole("link", { name: "Open process incident", exact: true })
-    .click();
-  await expect(
-    page.getByRole("heading", { name: "E2E service review due", exact: true }),
-  ).toBeVisible();
-});
+    ).toBeVisible();
+    await assignIncidentToEngineer(page);
+    await page
+      .getByRole("button", { name: "Record downtime", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Confirm factory downtime" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Confirm downtime", exact: true })
+      .click();
+    await expect(page.getByText(/^Confirmed downtime started/)).toBeVisible();
+    await page.getByRole("button", { name: "Resolve", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Confirm resolution", exact: true })
+      .click();
+    await expect(
+      page.getByText("Incident resolved", { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await expect(page.getByText(/^Resolved /).first()).toBeVisible();
+  },
+);
 
 test("only individual administrators change persisted demo visibility without seeding", async ({
   page,
@@ -875,24 +975,43 @@ test("admin can inspect demo AAS data and manage user access", async ({
   expect(environment.conceptDescriptions.length).toBeGreaterThan(0);
 });
 
-test("individual administrator registers, versions, restores and imports AAS assets", async ({
+test("individual administrator registers an independent gateway", async ({
   page,
 }) => {
   await loginAs(page, "admin");
+  const gatewayId = "e2e-edge-" + randomUUID();
+  const gatewayName = "E2E Edge Gateway " + gatewayId;
   await navigate(page, "Devices");
   await addItem(page, "gateway");
-  await page.getByLabel("Gateway ID").fill("e2e-edge-gateway-01");
-  await page.getByLabel("Gateway name").fill("E2E Edge Gateway");
+  await page.getByLabel("Gateway ID").fill(gatewayId);
+  await page.getByLabel("Gateway name").fill(gatewayName);
   await finishGateway(page);
   await expect(
-    page
-      .getByText("E2E Edge Gateway", { exact: true })
-      .filter({ visible: true }),
+    page.getByText(gatewayName, { exact: true }).filter({ visible: true }),
   ).toBeVisible();
+});
 
+test("individual administrator provisions an AAS asset and preserves its gateway and lifecycle links", async ({
+  page,
+}) => {
+  await loginAs(page, "admin");
+  const gatewayId = "e2e-asset-gateway-" + randomUUID();
+  const gatewayName = "E2E Asset Gateway " + gatewayId;
+  const assetName = "E2E Compressor " + randomUUID();
+  const gateway = await page.request.post("/api/trpc/devices.create", {
+    data: {
+      json: {
+        deviceId: gatewayId,
+        name: gatewayName,
+        type: "gateway",
+        route: "unconfigured",
+      },
+    },
+  });
+  expect(gateway.status()).toBe(200);
   await navigate(page, "Assets");
   await addItem(page, "asset");
-  await page.getByLabel("Asset name").fill("E2E Compressor 01");
+  await page.getByLabel("Asset name").fill(assetName);
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page
     .getByLabel("Manufacturer", { exact: true })
@@ -908,144 +1027,37 @@ test("individual administrator registers, versions, restores and imports AAS ass
   await page.getByLabel("Manufacturer order code").fill("E2E-COMP-001");
   await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByText("Not connected yet").click();
-  await page.getByRole("option", { name: /E2E Edge Gateway/ }).click();
+  await page
+    .getByRole("option", {
+      name: `${gatewayName} · ${gatewayId}`,
+      exact: true,
+    })
+    .click();
   await page.getByLabel("Machine endpoint").fill("opc.tcp://127.0.0.1:4840");
   for (let step = 0; step < 2; step++)
     await page.getByRole("button", { name: "Next", exact: true }).click();
   await page.getByRole("button", { name: /register and provision/i }).click();
   await expect(
-    page
-      .getByText("E2E Compressor 01", { exact: true })
-      .filter({ visible: true }),
+    page.getByText(assetName, { exact: true }).filter({ visible: true }),
   ).toBeVisible();
   await expect(page.getByText("AAS provisioned and registered")).toBeVisible();
   await expect(
     page.getByText(/profile was published to the edge gateway/i),
   ).toBeVisible();
   await page.getByRole("link", { name: /Open registered asset/ }).click();
+  await expect(
+    page.getByRole("heading", { name: assetName, exact: true }),
+  ).toBeVisible();
   await page.getByRole("tab", { name: "AAS & submodels", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Edit asset data", exact: true })
-    .click();
-  // Keep this revision-1 form open while a second browser session commits
-  // revision 2. Its later save must be rejected as stale.
-  const stalePage = await page.context().newPage();
-  await stalePage.goto(page.url());
-  const concurrentAssetRow = stalePage
-    .getByRole("row")
-    .filter({ hasText: "E2E Compressor 01" });
-  await stalePage
-    .getByRole("button", { name: "Edit asset data", exact: true })
-    .click();
-  await stalePage
-    .getByLabel("Manufacturer street")
-    .fill("Modified E2E Street 2");
-  await stalePage.getByRole("button", { name: "Save asset" }).click();
-  await expect(
-    stalePage.getByText("Asset details and AAS updated"),
-  ).toBeVisible();
-  await stalePage.close();
-
-  await page.getByLabel("Manufacturer street").fill("Stale E2E Street 9");
-  await page.getByRole("button", { name: "Save asset" }).click();
-  await expect(page.getByText(/version conflict/i)).toBeVisible();
-  await page.keyboard.press("Escape");
-  await navigate(page, "Assets");
-  const createdAssetRow = page
-    .getByRole("row")
-    .filter({ hasText: "E2E Compressor 01" });
-  await openItem(page, "E2E Compressor 01", "Activity");
-  await expect(page.getByText("AAS revision 2")).toBeVisible();
-  await expect(page.getByText("Revision 2 · current · updated")).toBeVisible();
-  await expect(page.getByText("Revision 1 · created")).toBeVisible();
-  await expect(page.getByText(/SHA-256: [a-f0-9]{64}/).first()).toBeVisible();
-  page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("button", { name: "Restore as new revision" }).click();
-  await expect(
-    page.getByText("Historical AAS restored as a new revision"),
-  ).toBeVisible();
-  await expect(page.getByText("AAS revision 3")).toBeVisible();
-  await expect(page.getByText("Revision 3 · current · updated")).toBeVisible();
-  await expect(page.getByText("Restored from version 1")).toBeVisible();
-  await page.getByRole("tab", { name: "AAS & submodels", exact: true }).click();
-  await page.locator("summary").getByText("Nameplate", { exact: true }).click();
-  await expect(
-    page
-      .getByText(/E2E Street 1/)
-      .filter({ visible: true })
-      .first(),
-  ).toBeVisible();
-  await navigate(page, "Assets");
-  await addItem(page, "asset");
-  await page.getByRole("tab", { name: "Import Package (.aasx)" }).click();
-  await page.locator("#aasx-package").setInputFiles({
-    name: "vendor-pump.aasx",
-    mimeType: "application/aas+zip",
-    buffer: Buffer.from("PK\x03\x04E2E fixture"),
-  });
-  const importResponsePromise = page.waitForResponse((response) =>
-    response.url().endsWith("/api/assets/import"),
-  );
-  await page.getByRole("button", { name: /import aasx package/i }).click();
-  const importResponse = await importResponsePromise;
-  expect(importResponse.status()).toBe(201);
-  expect(await importResponse.json()).toMatchObject({
-    assets: [{ name: "Vendor Pump 1" }],
-  });
-  await expect(
-    page.getByText("Vendor Pump 1", { exact: true }).filter({ visible: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Imported 1 asset from AASX")).toBeVisible();
-  const importedAssetRow = page
-    .getByRole("row")
-    .filter({ hasText: "Vendor Pump 1" });
-  await page
-    .getByRole("link", { name: "Open Vendor Pump 1", exact: true })
-    .click();
-  await page.getByRole("tab", { name: "AAS & submodels", exact: true }).click();
-  const importedDownload = page.waitForEvent("download");
-  await page.getByRole("button", { name: /export aas json/i }).click();
-  const importedFile = await importedDownload;
-  const importedEnvironment = JSON.parse(
-    await readFile(await importedFile.path(), "utf8"),
-  ) as { conceptDescriptions: Array<{ id: string }> };
-  expect(importedEnvironment.conceptDescriptions).toEqual([
-    { modelType: "ConceptDescription", id: "urn:e2e:concept:pump" },
-  ]);
-  await navigate(page, "Assets");
-  await addItem(page, "asset");
-  await page.getByRole("tab", { name: "Import Package (.aasx)" }).click();
-  await page.locator("#aasx-package").setInputFiles({
-    name: "vendor-pump-copy.aasx",
-    mimeType: "application/aas+zip",
-    buffer: Buffer.from("PK\x03\x04duplicate E2E fixture"),
-  });
-  const duplicateImportResponse = page.waitForResponse((response) =>
-    response.url().endsWith("/api/assets/import"),
-  );
-  await page.getByRole("button", { name: /import aasx package/i }).click();
-  const duplicateResponse = await duplicateImportResponse;
-  expect(duplicateResponse.status()).toBe(409);
-  await expect(
-    page.getByText(/already exists.*preserve the existing asset/i),
-  ).toBeVisible();
-  await page.getByRole("button", { name: /close/i }).click();
-  await expect(
-    page.getByText("Vendor Pump 1", { exact: true }).filter({ visible: true }),
-  ).toHaveCount(1);
   await navigate(page, "Devices");
-  await page
-    .getByLabel("Search inventory", { exact: true })
-    .fill("e2e-edge-gateway-01");
-  const gatewayRow = page
-    .getByRole("row")
-    .filter({ hasText: "e2e-edge-gateway-01" });
+  await page.getByLabel("Search inventory", { exact: true }).fill(gatewayId);
+  const gatewayRow = page.getByRole("row").filter({ hasText: gatewayId });
   await gatewayRow
-    .getByRole("link", { name: "E2E Edge Gateway", exact: true })
+    .getByRole("link", { name: gatewayName, exact: true })
     .click();
   await page.getByRole("tab", { name: "Connected items", exact: true }).click();
   await navigate(page, "Assets");
-  await openItem(page, "E2E Compressor 01", "Connections");
+  await openItem(page, assetName, "Connections");
   await expect(page.getByText("Asset Administration Shell")).toBeVisible();
   await expect(page.getByText("opc.tcp://127.0.0.1:4840")).toBeVisible();
   await page.getByRole("tab", { name: "AAS & submodels", exact: true }).click();
@@ -1070,6 +1082,185 @@ test("individual administrator registers, versions, restores and imports AAS ass
     page.getByRole("heading", { name: "Users & access", exact: true }),
   ).toBeVisible();
   await expect(page.getByText("security-engineer@example.test")).toBeVisible();
+});
+
+test("AAS revisions reject a stale editor and restore historical content as a new revision", async ({
+  page,
+}) => {
+  await loginAs(page, "admin");
+  const assetName = "E2E revision fixture " + randomUUID();
+  const gateway = await page.request.post("/api/trpc/devices.create", {
+    data: {
+      json: {
+        deviceId: "e2e-revision-gateway-" + randomUUID(),
+        name: "E2E revision gateway",
+        type: "gateway",
+        route: "unconfigured",
+      },
+    },
+  });
+  expect(gateway.status()).toBe(200);
+  const gatewayId = (await gateway.json()).result.data.json.id;
+  expect(Number.isSafeInteger(gatewayId) && gatewayId > 0).toBe(true);
+  const created = await page.request.post("/api/trpc/assets.create", {
+    data: {
+      json: {
+        assetId: "urn:e2e:revision:" + randomUUID(),
+        name: assetName,
+        assetType: "compressor",
+        manufacturer: "E2E Equipment GmbH",
+        model: "E2E Compressor Model",
+        manufacturerStreet: "E2E Street 1",
+        manufacturerZipcode: "10115",
+        manufacturerCityTown: "Berlin",
+        manufacturerNationalCode: "DE",
+        manufacturerArticleNumber: "E2E-COMP-ART-001",
+        orderCodeOfManufacturer: "E2E-COMP-001",
+        gatewayDevicePk: gatewayId,
+        protocol: "opcua",
+        endpoint: "opc.tcp://127.0.0.1:4840",
+      },
+    },
+  });
+  expect(created.status()).toBe(200);
+  const fixture = (await created.json()).result.data.json;
+  expect(fixture.provisioned).toBe(true);
+  expect(fixture.id).toEqual(expect.any(Number));
+  await page.goto(`/#/inventory/asset:${fixture.id}/aas`);
+  await page.getByRole("tab", { name: "AAS & submodels", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Edit asset data", exact: true })
+    .click();
+  // Keep this revision-1 form open while a second browser session commits
+  // revision 2. Its later save must be rejected as stale.
+  const stalePage = await page.context().newPage();
+  await stalePage.goto(page.url());
+  await stalePage
+    .getByRole("button", { name: "Edit asset data", exact: true })
+    .click();
+  await stalePage
+    .getByLabel("Manufacturer street")
+    .fill("Modified E2E Street 2");
+  await stalePage.getByRole("button", { name: "Save asset" }).click();
+  await expect(
+    stalePage.getByText("Asset details and AAS updated"),
+  ).toBeVisible();
+  await stalePage.close();
+
+  await page.getByLabel("Manufacturer street").fill("Stale E2E Street 9");
+  await page.getByRole("button", { name: "Save asset" }).click();
+  await expect(page.getByText(/version conflict/i)).toBeVisible();
+  await page.keyboard.press("Escape");
+  await navigate(page, "Assets");
+  await openItem(page, assetName, "Activity");
+  await expect(page.getByText("AAS revision 2")).toBeVisible();
+  await expect(page.getByText("Revision 2 · current · updated")).toBeVisible();
+  await expect(page.getByText("Revision 1 · created")).toBeVisible();
+  await expect(page.getByText(/SHA-256: [a-f0-9]{64}/).first()).toBeVisible();
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByRole("button", { name: "Restore as new revision" }).click();
+  await expect(
+    page.getByText("Historical AAS restored as a new revision"),
+  ).toBeVisible();
+  await expect(page.getByText("AAS revision 3")).toBeVisible();
+  await expect(page.getByText("Revision 3 · current · updated")).toBeVisible();
+  await expect(page.getByText("Restored from version 1")).toBeVisible();
+  await page.getByRole("tab", { name: "Connections", exact: true }).click();
+  await expect(page.getByText("Asset Administration Shell")).toBeVisible();
+  await expect(page.getByText("opc.tcp://127.0.0.1:4840")).toBeVisible();
+  await page.getByRole("tab", { name: "AAS & submodels", exact: true }).click();
+  await page.locator("summary").getByText("Nameplate", { exact: true }).click();
+  await expect(
+    page
+      .getByText(/E2E Street 1/)
+      .filter({ visible: true })
+      .first(),
+  ).toBeVisible();
+});
+
+test("AASX import preserves vendor concepts and rejects a duplicate without replacement", async ({
+  page,
+}) => {
+  await loginAs(page, "admin");
+  let importedId: number | undefined;
+  try {
+    await navigate(page, "Assets");
+    await addItem(page, "asset");
+    await page.getByRole("tab", { name: "Import Package (.aasx)" }).click();
+    await page.locator("#aasx-package").setInputFiles({
+      name: "vendor-pump.aasx",
+      mimeType: "application/aas+zip",
+      buffer: Buffer.from("PK\x03\x04E2E fixture"),
+    });
+    const importResponsePromise = page.waitForResponse((response) =>
+      response.url().endsWith("/api/assets/import"),
+    );
+    await page.getByRole("button", { name: /import aasx package/i }).click();
+    const importResponse = await importResponsePromise;
+    expect(importResponse.status()).toBe(201);
+    const receipt = await importResponse.json();
+    expect(receipt).toMatchObject({ assets: [{ name: "Vendor Pump 1" }] });
+    const id = receipt.assets[0].id;
+    expect(Number.isSafeInteger(id) && id > 0).toBe(true);
+    importedId = id;
+    await expect(
+      page
+        .getByText("Vendor Pump 1", { exact: true })
+        .filter({ visible: true }),
+    ).toBeVisible();
+    await expect(page.getByText("Imported 1 asset from AASX")).toBeVisible();
+    await page
+      .getByRole("link", { name: "Open Vendor Pump 1", exact: true })
+      .click();
+    await page
+      .getByRole("tab", { name: "AAS & submodels", exact: true })
+      .click();
+    const importedDownload = page.waitForEvent("download");
+    await page.getByRole("button", { name: /export aas json/i }).click();
+    const importedFile = await importedDownload;
+    const importedEnvironment = JSON.parse(
+      await readFile(await importedFile.path(), "utf8"),
+    ) as { conceptDescriptions: Array<{ id: string }> };
+    expect(importedEnvironment.conceptDescriptions).toEqual([
+      { modelType: "ConceptDescription", id: "urn:e2e:concept:pump" },
+    ]);
+    await navigate(page, "Assets");
+    await addItem(page, "asset");
+    await page.getByRole("tab", { name: "Import Package (.aasx)" }).click();
+    await page.locator("#aasx-package").setInputFiles({
+      name: "vendor-pump-copy.aasx",
+      mimeType: "application/aas+zip",
+      buffer: Buffer.from("PK\x03\x04duplicate E2E fixture"),
+    });
+    const duplicateImportResponse = page.waitForResponse((response) =>
+      response.url().endsWith("/api/assets/import"),
+    );
+    await page.getByRole("button", { name: /import aasx package/i }).click();
+    const duplicateResponse = await duplicateImportResponse;
+    expect(duplicateResponse.status()).toBe(409);
+    await expect(
+      page.getByText(/already exists.*preserve the existing asset/i),
+    ).toBeVisible();
+    await page.getByRole("button", { name: /close/i }).click();
+    await expect(
+      page
+        .getByText("Vendor Pump 1", { exact: true })
+        .filter({ visible: true }),
+    ).toHaveCount(1);
+  } finally {
+    // The upstream fixture intentionally returns one fixed shell identity for
+    // duplicate detection. Delete only the record created by this attempt's
+    // successful receipt so a retry never inherits a previous import.
+    if (importedId !== undefined) {
+      const removed = await page.request.post("/api/trpc/assets.delete", {
+        data: { json: { id: importedId } },
+      });
+      expect(removed.status()).toBe(200);
+      expect((await removed.json()).result.data.json).toMatchObject({
+        deleted: true,
+      });
+    }
+  }
 });
 
 test("viewer sees asset summaries while engineering and admin screens stay hidden", async ({
@@ -1329,12 +1520,7 @@ test("individual Demo/Live switch scopes data without changing factory settings"
   const input = encodeURIComponent(
     JSON.stringify({ json: { page: 0, pageSize: 50 } }),
   );
-  await Promise.all([
-    page.waitForEvent("load", { timeout: 30000 }),
-    page
-      .getByRole("combobox", { name: "Data workspace", exact: true })
-      .selectOption("demo"),
-  ]);
+  await selectDataWorkspace(page, "demo");
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible({ timeout: 30000 });
@@ -1356,12 +1542,7 @@ test("individual Demo/Live switch scopes data without changing factory settings"
     ).status(),
   ).toBe(403);
   expect((await page.request.get("/api/trpc/users.list")).status()).toBe(403);
-  await Promise.all([
-    page.waitForEvent("load", { timeout: 30000 }),
-    page
-      .getByRole("combobox", { name: "Data workspace", exact: true })
-      .selectOption("live"),
-  ]);
+  await selectDataWorkspace(page, "live");
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible({ timeout: 30000 });
