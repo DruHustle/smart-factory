@@ -1,50 +1,27 @@
 name: smart-factory-edge-node-red
-
 services:
   node-red:
-    image: ${NODE_RED_IMAGE:-nodered/node-red:5.0.9-24}
+    image: ${NODE_RED_IMAGE:?Set a reviewed immutable Node-RED image}
     restart: unless-stopped
-    working_dir: /usr/src/node-red
-    command:
-      [
-        "node",
-        "node_modules/node-red/red.js",
-        "--userDir",
-        "/data",
-        "--settings",
-        "/opt/smart-factory/settings.js",
-        "/data/flows.json",
-      ]
+    # Linux Raspberry Pi: host network is used only to reach loopback Mosquitto.
+    # Node-RED editor binds 127.0.0.1 and must be accessed via an SSH tunnel.
+    network_mode: host
+    init: true
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
     environment:
       TZ: ${TZ:-UTC}
-      NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET:?Set NODE_RED_CREDENTIAL_SECRET}
-      NODE_RED_ADMIN_USER: ${NODE_RED_ADMIN_USER:?Set NODE_RED_ADMIN_USER}
-      NODE_RED_ADMIN_PASSWORD_HASH: ${NODE_RED_ADMIN_PASSWORD_HASH:?Set NODE_RED_ADMIN_PASSWORD_HASH}
-      SMART_FACTORY_LOCAL_MQTT_HOST: ${SMART_FACTORY_LOCAL_MQTT_HOST:-host.docker.internal}
-      SMART_FACTORY_LOCAL_MQTT_PORT: ${SMART_FACTORY_LOCAL_MQTT_PORT:-1883}
-    ports:
-      - "127.0.0.1:${NODE_RED_HOST_PORT:-1880}:1880"
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET:?Set credential secret}
+      NODE_RED_ADMIN_USER: ${NODE_RED_ADMIN_USER:?Set admin username}
+      NODE_RED_ADMIN_PASSWORD_HASH: ${NODE_RED_ADMIN_PASSWORD_HASH:?Set bcrypt password hash}
     volumes:
       - node_red_data:/data
       - ./settings.js:/opt/smart-factory/settings.js:ro
+    command: ["node", "node_modules/node-red/red.js", "--userDir", "/data", "--settings", "/opt/smart-factory/settings.js"]
     healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:1880/admin/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
-        ]
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:1880/admin/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
       interval: 15s
       timeout: 5s
       retries: 20
-    networks: [edge-automation]
-
 volumes:
   node_red_data:
-
-networks:
-  edge-automation:
-    driver: bridge
