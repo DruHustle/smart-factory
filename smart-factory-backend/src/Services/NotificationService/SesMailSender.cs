@@ -8,6 +8,7 @@ public sealed class SesMailSender : IEmailSender
 {
     private readonly IAmazonSimpleEmailServiceV2 client;
     private readonly string sender;
+    private readonly string? webOrigin;
     private readonly HashSet<string> domains;
     private readonly HashSet<string> recipients;
     private readonly bool allowAll;
@@ -19,6 +20,7 @@ public sealed class SesMailSender : IEmailSender
     {
         this.client = client;
         sender = configuration["SES_FROM"] ?? "";
+        webOrigin = configuration["PASSWORD_RESET_ORIGIN"] ?? configuration["ALLOWED_ORIGIN"];
         Configured = string.Equals(configuration["SES_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
         allowAll = string.Equals(configuration["SES_ALLOW_ALL_RECIPIENTS"], "true", StringComparison.OrdinalIgnoreCase);
         domains = Split(configuration["SES_ALLOWED_RECIPIENT_DOMAINS"]);
@@ -47,7 +49,10 @@ public sealed class SesMailSender : IEmailSender
             Destination = new Destination { ToAddresses = [recipient] },
             Content = new EmailContent { Simple = new Message {
                 Subject = new Content { Data = title, Charset = "UTF-8" },
-                Body = new Body { Text = new Content { Data = body, Charset = "UTF-8" } },
+                Body = new Body {
+                    Text = new Content { Data = body, Charset = "UTF-8" },
+                    Html = new Content { Data = EmailTemplate.Render(title, body, notificationId, webOrigin), Charset = "UTF-8" },
+                },
                 Headers = [new MessageHeader { Name = "X-Smart-Factory-Notification-Id", Value = notificationId.ToString() }],
             } },
         }, ct);

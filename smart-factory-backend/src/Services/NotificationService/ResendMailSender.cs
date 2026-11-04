@@ -10,6 +10,7 @@ public sealed class ResendMailSender : IEmailSender
     private readonly HttpClient client;
     private readonly string apiKey;
     private readonly string sender;
+    private readonly string? webOrigin;
     private readonly HashSet<string> domains;
 
     public bool Configured => apiKey.Length > 0;
@@ -20,6 +21,7 @@ public sealed class ResendMailSender : IEmailSender
         this.client = client;
         apiKey = configuration["RESEND_API_KEY"] ?? "";
         sender = configuration["RESEND_FROM"] ?? "";
+        webOrigin = configuration["PASSWORD_RESET_ORIGIN"] ?? configuration["ALLOWED_ORIGIN"];
         domains = (configuration["RESEND_ALLOWED_RECIPIENT_DOMAINS"] ?? "")
             .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -45,6 +47,7 @@ public sealed class ResendMailSender : IEmailSender
             to = new[] { recipient },
             subject = title,
             text = body,
+            html = EmailTemplate.Render(title, body, notificationId, webOrigin),
             headers = new Dictionary<string, string> { ["X-Smart-Factory-Notification-Id"] = notificationId.ToString() },
         });
         using var response = await client.SendAsync(request, ct);
