@@ -44,22 +44,6 @@ The same non-root backend image runs four API processes and two worker processes
 
 The [Oracle runbook](../deploy/oracle/README.md) owns deployment, image identity, additive migrations, API-first ordering and rollback. Independent Vercel Git deployment for main remains disabled. The legacy Render workflow stays gated off. Repository protection is inspected independently and is not implied by a workflow.
 
-## Optional automation
-
-For a commissioned source the industrial flow is
-`PLC / machine → Node-RED → local broker → Python Smart Factory Edge Agent
-→ durable MQTT/TLS → Smart Factory worker/API`. The Python agent alone validates
-the device identity, mapping and provenance. A Node-RED flow may never self-certify
-its telemetry as current live data; that requires reviewed individual source
-commissioning. The existing Python gateway and security collector are retained
-for rollback; no physical command safety is delegated to Node-RED.
-
-`Smart Factory API → Activepieces` is an optional separate best-effort
-business event integration for incident notes and follow-up actions. Activepieces
-does not own process incidents, app roles, equipment commands or telemetry.
-Both automation runtimes are independent of other Onesa applications and
-disabled until explicitly configured and qualified.
-
 ## Identity, scope and evidence
 
 The Node API checks bcrypt passwords and issues eight-hour HttpOnly cookie sessions. Protected requests reload current role, disabled state, session generation, recovery restriction and revocation. Sockets retain identity and expiry; delegated .NET routes independently enforce the persisted session. Unsafe cookie requests enforce exact allowed origins. Secrets never enter browser state or published profiles.
