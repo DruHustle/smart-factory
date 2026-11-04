@@ -12,16 +12,25 @@ describe("qualification source layout", () => {
       edge: "a".repeat(40),
     });
   });
-  it.each([undefined, "", "main", "a".repeat(39), "A".repeat(40)])(
-    "rejects an unpinned monorepo revision: %s",
-    (revision) => {
-      expect(() => expectedSources("monorepo", revision, pins)).toThrow();
-    },
-  );
+  it.each([
+    undefined,
+    "",
+    "main",
+    "a".repeat(39),
+    "A".repeat(40),
+    "a".repeat(40) + "\n",
+  ])("rejects an unpinned monorepo revision: %s", (revision) => {
+    expect(() => expectedSources("monorepo", revision, pins)).toThrow();
+  });
   it("does not silently accept unknown layouts", () => {
     expect(() => expectedSources("other", "a".repeat(40), pins)).toThrow();
   });
   it("rejects invalid legacy pins", () => {
-    expect(() => expectedSources("legacy", undefined, { backend: "main", edge: pins.edge })).toThrow();
+    expect(() =>
+      expectedSources("legacy", undefined, {
+        backend: "main",
+        edge: pins.edge,
+      }),
+    ).toThrow();
   });
 });

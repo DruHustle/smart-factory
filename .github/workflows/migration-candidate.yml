@@ -5,7 +5,7 @@ on:
     paths:
       - .github/workflows/migration-candidate.yml
       - scripts/consolidate_workflows.py
-      - scripts/tests/test_consolidate_workflows.py
+      - scripts/tests/**
 permissions:
   contents: read
 jobs:
@@ -42,7 +42,7 @@ jobs:
           PY
           python3 -m unittest discover -s smart-factory-frontend/scripts/tests -p test_source_revisions.py -v
           python3 -m py_compile smart-factory-frontend/scripts/bundle-smoke.py
-      - name: Stage Git objects only, without changing any branch or production
+      - name: Store content-addressed review blobs only
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
@@ -54,9 +54,15 @@ jobs:
           assert sha==os.environ['EXPECTED_SHA']
           paths=['.github/workflows/'+name for name in ('frontend-quality.yml','documentation-artifacts.yml','renderer-quality.yml')]
           paths.append('smart-factory-frontend/scripts/bundle-smoke.py')
-          entries=[{'path':p,'mode':'100644','type':'blob','content':Path(p).read_text()} for p in paths]
-          base=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
-          result=subprocess.run(['gh','api','--method','POST','repos/DruHustle/smart-factory/git/trees','--input','-'],input=json.dumps({'base_tree':base,'tree':entries}),text=True,capture_output=True,check=True)
-          tree=json.loads(result.stdout)['sha']
-          print(json.dumps({'parent':sha,'tree':tree,'files':{p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths},'branchesChanged':False,'productionChanged':False}))
+          for path in paths:
+              content=Path(path).read_text()
+              result=subprocess.run(['gh','api','--method','POST','repos/DruHustle/smart-factory/git/blobs','--input','-'],input=json.dumps({'content':content,'encoding':'utf-8'}),text=True,capture_output=True)
+              if result.returncode:
+                  print(result.stderr)
+                  print(result.stdout)
+                  raise SystemExit(result.returncode)
+              blob=json.loads(result.stdout)['sha']
+              expected=hashlib.sha1(('blob '+str(len(content.encode()))+'\0').encode()+content.encode()).hexdigest()
+              assert blob==expected
+              print(json.dumps({'parent':sha,'path':path,'blob':blob,'sha256':hashlib.sha256(content.encode()).hexdigest(),'branchesChanged':False,'productionChanged':False}),flush=True)
           PY
