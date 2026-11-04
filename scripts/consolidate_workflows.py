@@ -71,7 +71,9 @@ def migrate(original):
         if 'uses' in job:
             raise ValueError('Reusable workflows require explicit migration')
         cross_service = job_id in CROSS_SERVICE
-        if cross_service:
+        has_checkout = any(step.get('uses', '').startswith('actions/checkout@')
+                           for step in job.get('steps', []))
+        if cross_service or not has_checkout:
             job['defaults'] = {'run': {'working-directory': '.', 'shell': 'bash'}}
         steps = []
         removed = []
@@ -91,6 +93,7 @@ def migrate(original):
                     raise ValueError('Unexpected external source checkout: ' + repository)
                 options.pop('path', None)
                 options['persist-credentials'] = False
+                options['ref'] = '${{ github.event.pull_request.head.sha || github.sha }}'
             elif action == 'actions/setup-node' and step.get('with', {}).get('cache') == 'pnpm':
                 step['with']['cache-dependency-path'] = FRONTEND + '/pnpm-lock.yaml'
             elif action == 'pnpm/action-setup':
