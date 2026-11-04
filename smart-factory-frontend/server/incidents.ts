@@ -74,7 +74,6 @@ export async function addIncidentNote(
     activityId: result.id,
     actorId,
     category,
-    text,
   });
   return result;
 }
