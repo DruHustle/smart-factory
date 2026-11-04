@@ -1,0 +1,6 @@
+{
+  "repository": "DruHustle/smart-factory",
+  "layout": "monorepo",
+  "rollbackRevision": "f29761e450b0290a8bc4845a987460eca14a933b",
+  "purpose": "Isolated compatibility baseline; not a production rollback receipt or retirement approval."
+}

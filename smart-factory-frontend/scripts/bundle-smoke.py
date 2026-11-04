@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Acceptance checks for the real six-process image with disposable dependencies."""
 from pathlib import Path
+from qualification.source_revisions import load_rollback_sources
 from http.cookiejar import CookieJar
 from datetime import datetime, timezone
 import hashlib, json, os, re, secrets, subprocess, tempfile, time, urllib.request, urllib.error, urllib.parse, uuid
@@ -614,7 +615,7 @@ with socket.create_connection(('broker',1883),timeout=10) as sock:
     if rollback_image:
         current_image=os.environ.get('BUNDLE_IMAGE','smart-factory-render-review:local')
         candidate_runtime=runtime
-        rollback_sources=json.loads((ROOT/'deploy/rollback-sources.json').read_text())
+        rollback_sources=load_rollback_sources(ROOT)
         assert 'industrial-connectivity-v1' in candidate_runtime['capabilities']
         assert OT_EXPANDED_CAPABILITIES.issubset(candidate_runtime['capabilities'])
         industrial_fixture=prepare_industrial_rollback(engineer)
