@@ -13,6 +13,9 @@ name: Factory Render engineering documentation
     - .github/workflows/**
     - scripts/consolidate_workflows.py
   workflow_dispatch: null
+  push:
+    branches:
+    - main
 permissions:
   contents: read
 concurrency:

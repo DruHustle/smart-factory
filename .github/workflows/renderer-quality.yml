@@ -10,6 +10,9 @@ name: Factory Native 3D rendering
     - .github/workflows/**
     - scripts/consolidate_workflows.py
   workflow_dispatch: null
+  push:
+    branches:
+    - main
 permissions:
   contents: read
 jobs:

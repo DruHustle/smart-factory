@@ -62,6 +62,8 @@ def prefixed(path):
 def migrate(original):
     data = deepcopy(original)
     data['name'] = 'Factory ' + data['name']
+    # Every canonical main revision must have complete release evidence.
+    data['on']['push'] = {'branches': ['main']}
     data['defaults'] = {'run': {'working-directory': FRONTEND, 'shell': 'bash'}}
     for event in data['on'].values():
         if isinstance(event, dict) and 'paths' in event:

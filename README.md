@@ -1,18 +1,26 @@
 # Smart Factory
 
-Smart Factory contains the frontend, backend, and edge software in the three
-component directories below. Each component keeps its existing application,
-build configuration, migrations, and documentation.
+The canonical repository contains three independently configured components:
 
-- `smart-factory-frontend/` — dashboard, application API, and deployment tools.
-- `smart-factory-backend/` — backend services.
-- `smart-factory-edge/` — gateway and device firmware.
+- `smart-factory-frontend/` — responsive dashboard, application API and release tools.
+- `smart-factory-backend/` — .NET backend services and telemetry workers.
+- `smart-factory-edge/` — gateway integrations and device firmware.
 
-This repository is being prepared from the previously deployed component
-revisions. The original component repositories and remotes retain their complete histories. This combined repository carries a filtered copy of that history: diagnostic evidence and non-example environment files are excluded, so its historical commit IDs differ from the originals.
-The current production release process still uses those original repositories;
-this combined layout must not be used to promote a release until the monorepo
-CI and release workflows have been validated.
+Authoritative quality and controlled release workflows live in `.github/workflows/`.
+They validate the complete source, including browser journeys, real broker/service
+contracts, native ARM64 images and isolated rollback compatibility. Nested frontend
+workflows remain compatibility templates; `scripts/consolidate_workflows.py --check`
+ensures their quality jobs and test commands remain represented at the root.
 
-Local tools, private credentials, deployment evidence, and extra worktrees
-belong in `local-tools/` and are excluded from Git.
+**Production cutover and old-repository deletion are not yet established.** The
+manual frontend workflow is gated and must not be enabled before exact-source
+qualification, verified API installation and reviewed infrastructure configuration.
+Do not delete or archive the legacy component repositories until production and
+operational rollback evidence, independent backups and dependency removal are
+complete. See [the consolidated release runbook](docs/consolidated-release.md).
+
+The consolidated Git history is filtered: diagnostic evidence and non-example
+environment files were excluded, so historical commit IDs differ from the original
+component repositories. Preserve those original histories independently before
+retirement. Local tools, credentials, deployment evidence and extra worktrees belong
+in ignored `local-tools/`, never in Git.

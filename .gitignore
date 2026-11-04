@@ -9,3 +9,7 @@
 /smart-factory-frontend/node_modules
 /smart-factory-backend/node_modules
 /smart-factory-edge/node_modules
+
+__pycache__/
+
+*.py[cod]

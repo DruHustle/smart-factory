@@ -1,0 +1,55 @@
+name: Factory remaining feature coverage
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: factory-feature-coverage-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  journeys:
+    name: Feature coverage (${{ matrix.suite }})
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: smart-factory-frontend
+        shell: bash
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [onesa, resources]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.34.5
+          package_json_file: smart-factory-frontend/package.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: smart-factory-frontend/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm e2e:${{ matrix.suite }}
+        env:
+          RESOURCE_EVIDENCE_DIR: test-results/resources/evidence
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: feature-${{ matrix.suite }}
+          path: |
+            smart-factory-frontend/test-results/**/*.json
+            smart-factory-frontend/test-results/**/*.log
+            smart-factory-frontend/test-results/**/*.txt
+            smart-factory-frontend/test-results/**/*.xml
+          if-no-files-found: warn
+          retention-days: 7
