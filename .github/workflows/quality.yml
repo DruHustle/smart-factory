@@ -81,6 +81,8 @@ jobs:
         with: { dotnet-version: 10.0.403 }
       - name: Validate optional migration configuration without starting services
         run: python3 scripts/test_onesa_migration_config.py --require-compose
+      - name: Verify worker-only mail configuration
+        run: node --test scripts/split-render-env.test.mjs
       - run: dotnet restore src/SmartFactory.sln -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=high -warnaserror:NU1900,NU1903,NU1904 --force-evaluate
       - run: dotnet test src/SmartFactory.sln -c Release --no-restore
 

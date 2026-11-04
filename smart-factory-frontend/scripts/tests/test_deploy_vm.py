@@ -383,7 +383,7 @@ class ConfigurationTests(unittest.TestCase):
     def mail(self):
         api = {"DASHBOARD_SERVICE_TOKEN": "s" * 40, "BACKEND_DEPLOYMENT_MODE": "render-bundle",
                "EMAIL_PROVIDER": "smtp", "ALLOWED_ORIGIN": vm.UI_ORIGIN}
-        worker = {"DASHBOARD_SERVICE_TOKEN": "s" * 40, "EMAIL_PROVIDER": "smtp", "SMTP_USERNAME": "synthetic",
+        worker = {"DASHBOARD_SERVICE_TOKEN": "s" * 40, "EMAIL_PROVIDER": "smtp", "SMTP_HOST": "smtp.example.test", "SMTP_USERNAME": "synthetic",
                   "SMTP_PASSWORD": "synthetic-secret", "SMTP_FROM": "synthetic@example.test", "SMTP_ALLOWED_RECIPIENTS": "person@example.test"}
         return api, worker
 
@@ -401,6 +401,11 @@ class ConfigurationTests(unittest.TestCase):
     def test_no_recipient_policy_never_enables_mail_delivery(self):
         api, worker = self.mail()
         worker.pop("SMTP_ALLOWED_RECIPIENTS")
+        self.assertEqual(vm.mail_configuration_plan(api, worker)[0]["EMAIL_DELIVERY_CONFIGURED"], "false")
+
+    def test_no_smtp_host_never_enables_mail_delivery(self):
+        api, worker = self.mail()
+        worker.pop("SMTP_HOST")
         self.assertEqual(vm.mail_configuration_plan(api, worker)[0]["EMAIL_DELIVERY_CONFIGURED"], "false")
 
     def test_cutover_allowlist_requires_one_explicit_reset_origin_on_both_processes(self):

@@ -6,21 +6,31 @@ namespace SmartFactory.Tests;
 public class DashboardServiceTests
 {
     [Fact]
-    public void GmailSmtpRequiresAnExplicitRecipientPolicy()
+    public void SmtpHasNoImplicitGmailHost()
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> {
-            ["SMTP_USERNAME"]="smartfactory.notifications@gmail.com", ["SMTP_PASSWORD"]="app-password",
-            ["SMTP_FROM"]="Smart Factory <smartfactory.notifications@gmail.com>"
+            ["SMTP_USERNAME"]="sender@example.com", ["SMTP_PASSWORD"]="test-only",
+            ["SMTP_FROM"]="sender@example.com", ["SMTP_ALLOW_ALL_RECIPIENTS"]="true"
         }).Build();
         Assert.Throws<InvalidOperationException>(() => new SmtpMailSender(config));
     }
 
     [Fact]
-    public void GmailSmtpAllowsSignupRecipientsWhenExplicitlyEnabled()
+    public void SmtpRequiresAnExplicitRecipientPolicy()
     {
         var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> {
-            ["SMTP_USERNAME"]="smartfactory.notifications@gmail.com", ["SMTP_PASSWORD"]="app-password",
-            ["SMTP_FROM"]="Smart Factory <smartfactory.notifications@gmail.com>", ["SMTP_ALLOW_ALL_RECIPIENTS"]="true"
+            ["SMTP_HOST"]="smtp.example.com", ["SMTP_USERNAME"]="sender@example.com", ["SMTP_PASSWORD"]="app-password",
+            ["SMTP_FROM"]="Smart Factory <sender@example.com>"
+        }).Build();
+        Assert.Throws<InvalidOperationException>(() => new SmtpMailSender(config));
+    }
+
+    [Fact]
+    public void SmtpAllowsSignupRecipientsWhenExplicitlyEnabled()
+    {
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> {
+            ["SMTP_HOST"]="smtp.example.com", ["SMTP_USERNAME"]="sender@example.com", ["SMTP_PASSWORD"]="app-password",
+            ["SMTP_FROM"]="Smart Factory <sender@example.com>", ["SMTP_ALLOW_ALL_RECIPIENTS"]="true"
         }).Build();
         var sender = new SmtpMailSender(config);
         Assert.True(sender.Configured);
@@ -55,12 +65,12 @@ public class DashboardServiceTests
     }
     [Fact] public void SesRequiresExplicitEnablementSenderAndRecipientPolicy() {
         var invalid = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> {
-            ["SES_ENABLED"]="true", ["SES_FROM"]="Smart Factory <smartfactory.notifications@gmail.com>"
+            ["SES_ENABLED"]="true", ["SES_FROM"]="Smart Factory <sender@example.com>"
         }).Build();
         Assert.Throws<InvalidOperationException>(() => new SesMailSender(null!, invalid));
 
         var restricted = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string,string?> {
-            ["SES_ENABLED"]="true", ["SES_FROM"]="Smart Factory <smartfactory.notifications@gmail.com>",
+            ["SES_ENABLED"]="true", ["SES_FROM"]="Smart Factory <sender@example.com>",
             ["SES_ALLOWED_RECIPIENTS"]="verified@example.com", ["SES_ALLOWED_RECIPIENT_DOMAINS"]="factory.example"
         }).Build();
         var sender = new SesMailSender(null!, restricted);
