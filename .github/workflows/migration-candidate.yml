@@ -1,0 +1,43 @@
+name: Prepare inert workflow migration objects
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/migration-candidate.yml
+      - scripts/consolidate_workflows.py
+      - scripts/tests/test_consolidate_workflows.py
+permissions:
+  contents: read
+jobs:
+  prepare:
+    if: github.event.pull_request.head.repo.full_name == 'DruHustle/smart-factory' && github.event.pull_request.head.ref == 'fix/consolidated-release-20261104'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - run: python3 -m pip install --only-binary=:all: PyYAML==6.0.3
+      - run: python3 -m unittest discover -s scripts/tests -v
+      - run: python3 scripts/consolidate_workflows.py --write
+      - run: python3 scripts/consolidate_workflows.py --check
+      - name: Stage Git objects only, without changing any branch or production
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,subprocess
+          from pathlib import Path
+          sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
+          assert sha==os.environ['EXPECTED_SHA']
+          paths=['.github/workflows/'+name for name in ('frontend-quality.yml','documentation-artifacts.yml','renderer-quality.yml')]
+          entries=[{'path':p,'mode':'100644','type':'blob','content':Path(p).read_text()} for p in paths]
+          base=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
+          result=subprocess.run(['gh','api','--method','POST','repos/DruHustle/smart-factory/git/trees','--input','-'],input=json.dumps({'base_tree':base,'tree':entries}),text=True,capture_output=True,check=True)
+          tree=json.loads(result.stdout)['sha']
+          print(json.dumps({'parent':sha,'tree':tree,'files':{p:hashlib.sha256(Path(p).read_bytes()).hexdigest() for p in paths},'branchesChanged':False,'productionChanged':False}))
+          PY
