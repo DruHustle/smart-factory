@@ -224,10 +224,19 @@ jobs:
             exit 1
           fi
 
-  unified-workspace:
-    name: Unified workspace journeys
+  workspace-browser:
+    name: Workspace browser journeys (${{ matrix.suite }})
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        include:
+          - suite: workspace
+            files: 'e2e/workspace\.spec\.ts$'
+          - suite: integrations
+            files: 'e2e/(assistant-selection|factory-layouts-private|incident-assignment|infrastructure-private|list-filters)\.spec\.ts$'
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with: { persist-credentials: false }
@@ -237,11 +246,14 @@ jobs:
         with: { node-version: 22, cache: pnpm }
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm e2e:workspace
+      - name: Verify every journey in the independent group
+        env:
+          E2E_TEST_FILES: ${{ matrix.files }}
+        run: pnpm e2e:workspace "$E2E_TEST_FILES" --reporter=line
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
-          name: workspace-rendered-evidence
+          name: workspace-rendered-evidence-${{ matrix.suite }}
           path: |
             test-results/**/*.json
             test-results/**/*.log
@@ -253,6 +265,22 @@ jobs:
             test-results/**/*.dxf
             test-results/**/*.sha256
           if-no-files-found: warn
+
+  unified-workspace:
+    name: Unified workspace journeys
+    needs: [workspace-browser]
+    if: ${{ always() }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require every workspace browser group
+        env:
+          WORKSPACE_RESULT: ${{ needs.workspace-browser.result }}
+        run: |
+          if [[ "$WORKSPACE_RESULT" != "success" ]]; then
+            echo "Workspace browser groups: $WORKSPACE_RESULT"
+            exit 1
+          fi
 
   visual-contracts:
     name: CAD, factory contracts and layout navigation

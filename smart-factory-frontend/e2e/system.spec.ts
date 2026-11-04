@@ -145,6 +145,11 @@ test("Overview, Monitoring, Analytics, alerts and Assistant expose focused evide
     page.getByRole("button", { name: "Pause", exact: true }),
   ).toBeVisible();
   await navigate(page, "Analytics");
+  // Sidebar navigation finishes before the lazy route mounts. Establish the
+  // page boundary before checking its resolved measurement state.
+  await expect(
+    page.getByRole("heading", { name: "Analytics", exact: true, level: 1 }),
+  ).toBeVisible();
   await expect(
     page.getByText("No verified measurements in this period", { exact: true }),
   ).toBeVisible();

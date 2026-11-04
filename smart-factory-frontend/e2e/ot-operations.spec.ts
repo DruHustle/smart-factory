@@ -8,6 +8,7 @@ import {
 } from "../shared/operations";
 import { enterSimulation, noOverflow, rpc } from "./visual-workspace-helpers";
 import { selectDataWorkspace, signInToOverview } from "./readiness-helpers";
+import { withAssistantHandoffDiagnostics } from "./assistant-handoff-diagnostics";
 
 // The public demo runner seeds only disposable, synthetic accounts and records.
 // These journeys exercise the real HTTP service; they do not mock authorization.
@@ -172,7 +173,7 @@ test("six recorded scenarios retain their evidence, explicit simulation and hone
 
 test("mobile scenario investigation preserves the same equipment references and exact historical window through Assistant", async ({
   page,
-}) => {
+}, testInfo) => {
   const showcase = await enterSimulation(page, 390);
   const endTime = Date.parse(showcase.anchor),
     startTime = endTime - 3600000;
@@ -201,15 +202,20 @@ test("mobile scenario investigation preserves the same equipment references and 
     "Utility loss and slowdown",
   );
   await noOverflow(page);
-  await scenarioEvidence(page)
-    .getByRole("link", { name: "Ask about this scenario" })
-    .click();
-  await expect(page).toHaveURL(/#\/assistant\?/);
-  // The hash changes before the lazy workspace mounts. Require the requested
-  // page before checking the investigation that its mount applies.
-  await expect(
-    page.getByRole("heading", { name: "Assistant", exact: true, level: 1 }),
-  ).toBeVisible();
+  await withAssistantHandoffDiagnostics(page, testInfo, async (mark) => {
+    await scenarioEvidence(page)
+      .getByRole("link", { name: "Ask about this scenario" })
+      .click();
+    mark("link-clicked");
+    await expect(page).toHaveURL(/#\/assistant\?/);
+    mark("route-url-matched");
+    // The hash changes before the lazy workspace mounts. Require the requested
+    // page before checking the investigation that its mount applies.
+    await expect(
+      page.getByRole("heading", { name: "Assistant", exact: true, level: 1 }),
+    ).toBeVisible();
+    mark("heading-observed");
+  });
   const assistantQuery = new URLSearchParams(
     new URL(page.url()).hash.split("?")[1],
   );

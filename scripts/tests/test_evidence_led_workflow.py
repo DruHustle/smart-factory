@@ -25,6 +25,65 @@ class EvidenceLedWorkflowTests(unittest.TestCase):
                          '.github/workflows/frontend-quality.yml'):
             yield m.load((ROOT / relative).read_text())
 
+    def test_every_workspace_browser_file_runs_in_one_independent_group(self):
+        config = (ROOT / 'smart-factory-frontend/playwright.workspace.config.ts').read_text()
+        selection = re.search(r'testMatch:\s*\[(.*?)\]', config, re.S)
+        self.assertIsNotNone(selection)
+        files = re.findall(r'"([^"]+\.spec\.ts)"', selection.group(1))
+        self.assertEqual(set(files), {
+            'workspace.spec.ts', 'incident-assignment.spec.ts',
+            'infrastructure-private.spec.ts', 'factory-layouts-private.spec.ts',
+            'assistant-selection.spec.ts', 'list-filters.spec.ts',
+        })
+        for flow in self.workflows():
+            job = flow['jobs']['workspace-browser']
+            matrix = job['strategy']['matrix']['include']
+            self.assertEqual(len(matrix), 2)
+            self.assertEqual(len({group['suite'] for group in matrix}), 2)
+            selected = []
+            for group in matrix:
+                matches = [name for name in files if re.search(group['files'], 'e2e/' + name)]
+                self.assertTrue(matches, group['suite'])
+                selected.extend(matches)
+            self.assertCountEqual(selected, files)
+            step, = [s for s in job['steps'] if 'E2E_TEST_FILES' in s.get('env', {})]
+            self.assertEqual(step['env'], {'E2E_TEST_FILES': '${{ matrix.files }}'})
+            self.assertEqual(step['run'], 'pnpm e2e:workspace "$E2E_TEST_FILES" --reporter=line')
+            artifact, = [s for s in job['steps'] if s.get('uses', '').startswith('actions/upload-artifact@')]
+            self.assertEqual(artifact['with']['name'], 'workspace-rendered-evidence-${{ matrix.suite }}')
+
+    def test_workspace_groups_retain_budgets_and_do_not_cancel_peers(self):
+        config = (ROOT / 'smart-factory-frontend/playwright.workspace.config.ts').read_text()
+        for setting in (r'timeout:\s*60000\s*,', r'expect:\s*\{\s*timeout:\s*15000\s*\}',
+                        r'retries:\s*0\s*,', r'workers:\s*1\s*,', r'fullyParallel:\s*false\s*,'):
+            self.assertRegex(config, setting)
+        for flow in self.workflows():
+            self.assertEqual(flow['permissions'], {'contents': 'read'})
+            job = flow['jobs']['workspace-browser']
+            self.assertEqual(job['timeout-minutes'], 15)
+            self.assertIs(job['strategy']['fail-fast'], False)
+            self.assertEqual(job['strategy']['max-parallel'], 2)
+            for key in ('if', 'continue-on-error', 'environment'):
+                self.assertNotIn(key, job)
+            for step in job['steps']:
+                self.assertNotIn('continue-on-error', step)
+
+    def test_original_workspace_result_rejects_incomplete_groups(self):
+        for flow in self.workflows():
+            job = flow['jobs']['unified-workspace']
+            self.assertEqual(job['name'], 'Unified workspace journeys')
+            self.assertEqual(job['if'], '${{ always() }}')
+            self.assertEqual(job['needs'], ['workspace-browser'])
+            step, = job['steps']
+            self.assertEqual(step['env'], {'WORKSPACE_RESULT': '${{ needs.workspace-browser.result }}'})
+            for outcome in ('success', 'failure', 'cancelled', 'skipped', '', 'unknown'):
+                result = subprocess.run(
+                    ['bash', '--noprofile', '--norc', '-c', step['run']],
+                    env={**os.environ, 'WORKSPACE_RESULT': outcome},
+                    capture_output=True, text=True, timeout=5,
+                )
+                self.assertEqual(result.returncode == 0, outcome == 'success')
+
     def test_every_configured_browser_file_runs_once(self):
         config = (ROOT / 'smart-factory-frontend/playwright.visual-workspaces.config.ts').read_text()
         selection = re.search(r'testMatch:\s*\[(.*?)\]', config, re.S)
