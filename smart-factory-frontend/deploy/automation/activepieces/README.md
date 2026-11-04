@@ -20,9 +20,29 @@ docker compose --env-file .env up -d
 curl --fail http://127.0.0.1:8080/api/v1/health
 ```
 
+Before starting, pin an approved compatible image (the example deliberately
+has no default), choose a unique 32-byte `AP_ENCRYPTION_KEY` and JWT secret,
+and create an Activepieces worker token using its official CLI:
+
+```sh
+npx @activepieces/cli workers token
+```
+
+Generate the token with the same JWT secret as the app and set it privately as
+`AP_WORKER_TOKEN`. The worker has no PostgreSQL/Redis credentials: it
+connects only through the app API, with concurrency 1.
+
 The application listener is bound to loopback. Put authenticated TLS ingress in
 front of it if the editor/webhooks need remote access. PostgreSQL and Redis have no
 host listener.
+
+Create one Activepieces webhook flow for Smart Factory business events.
+The flow must verify the raw request HMAC with an independently stored secret
+before performing side effects; an ordinary public webhook URL by itself is not
+authentication. Validate the actual method your pinned Activepieces version
+offers for checking raw webhook bytes before enabling outbound production events.
+Webhook dispatch is currently **best-effort only**: there is no durable
+application outbox, and a returned HTTP status does not prove a flow completed.
 
 Create one Activepieces webhook flow for Smart Factory business events. Configure
 the Smart Factory API with:
