@@ -1,0 +1,83 @@
+[
+  {
+    "id": "factory-tab",
+    "type": "tab",
+    "label": "Smart Factory Node-RED (DISABLED SIMULATION)",
+    "disabled": true,
+    "info": "Only for manual isolated testing. The Python edge gateway must separately commission the exact device ID. Never infer live sensor measurements from this fixture."
+  },
+  {
+    "id": "manual-demo",
+    "type": "inject",
+    "z": "factory-tab",
+    "name": "Manual synthetic fixture only",
+    "props": [
+      {
+        "p": "payload"
+      }
+    ],
+    "payload": "true",
+    "payloadType": "bool",
+    "once": false,
+    "wires": [
+      [
+        "format-demo"
+      ]
+    ]
+  },
+  {
+    "id": "format-demo",
+    "type": "function",
+    "z": "factory-tab",
+    "name": "Transform (unverified)",
+    "func": "// Manual fixture only. No real machine source; default Python policy denies the ID.\nmsg.topic = 'factory/factory-a/line-1/node-red-demo/telemetry';\nmsg.payload = JSON.stringify({deviceId:'node-red-demo', timestamp:Date.now(),\n  temperature:0, units:{temperature:'Cel'}});\n// No integration/observation fields: Node-RED cannot self-certify provenance.\nreturn msg;",
+    "outputs": 1,
+    "noerr": 0,
+    "initialize": "",
+    "finalize": "",
+    "libs": [],
+    "wires": [
+      [
+        "publish-local"
+      ]
+    ]
+  },
+  {
+    "id": "publish-local",
+    "type": "mqtt out",
+    "z": "factory-tab",
+    "name": "Broker ACL → Python edge",
+    "topic": "",
+    "qos": "1",
+    "retain": "false",
+    "broker": "local-broker",
+    "wires": []
+  },
+  {
+    "id": "local-broker",
+    "type": "mqtt-broker",
+    "name": "LOCAL BROKER - provision credential in editor",
+    "broker": "127.0.0.1",
+    "port": "1883",
+    "clientid": "node-red-commissioned",
+    "autoConnect": false,
+    "usetls": false,
+    "protocolVersion": "5",
+    "keepalive": "60",
+    "cleansession": true,
+    "autoUnsubscribe": true,
+    "sessionExpiry": "",
+    "birthTopic": "",
+    "birthQos": "0",
+    "birthPayload": "",
+    "birthMsg": {},
+    "closeTopic": "",
+    "closeQos": "0",
+    "closePayload": "",
+    "closeMsg": {},
+    "willTopic": "",
+    "willQos": "0",
+    "willPayload": "",
+    "willMsg": {}
+  }
+]
