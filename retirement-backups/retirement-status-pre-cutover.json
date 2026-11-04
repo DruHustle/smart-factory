@@ -1,0 +1,57 @@
+{
+  "recordedAt": "2026-11-04T11:30:00Z",
+  "canonical": {
+    "repository": "DruHustle/smart-factory",
+    "main": "c4b2d229ffa2af6e027de827d4c66c11158211ba",
+    "allRequiredMainWorkflowsGreen": true
+  },
+  "qualifiedArtifact": {
+    "workflowRunId": 41806190859,
+    "artifactId": 13310806182,
+    "sha256": "883cf9930146db841a2ce718c389c9b8821f66f132318df9e2baf7458ade93a4",
+    "size": 385387493
+  },
+  "vercel": {
+    "projectId": "prj_Xqy6oMEUQ6yIXgv69PHpO5Tv8M6S",
+    "customDomain": "factory.onesa.eu",
+    "retainedProductionDeployment": "dpl_6WDA1sbP3Me79t9PE64pub8GxkuF",
+    "canonicalPreview": "dpl_5NDmfFV1arTAeLDXVjQdS1YMHdRh",
+    "canonicalProductionStage": "dpl_65ei1gmypDfTKy4vMsQb5NQwE7yu",
+    "canonicalProductionStageReady": true,
+    "rootDirectory": "smart-factory-frontend",
+    "autoAssignCustomDomains": false,
+    "ignoredBuildStep": "exit 0",
+    "legacyGitProducerFrozen": true
+  },
+  "backend": {
+    "liveSources": {
+      "frontend": "9b472aeb9af3efa6bd59d20f889e9773532db58e",
+      "backend": "adc34accfc5a9e418b1a2ecaed52500d17cb74ed",
+      "edge": "369c76b7417b6b97e54bb3d8d7af541273d8ebfa"
+    },
+    "targetSources": {
+      "frontend": "c4b2d229ffa2af6e027de827d4c66c11158211ba",
+      "backend": "c4b2d229ffa2af6e027de827d4c66c11158211ba",
+      "edge": "c4b2d229ffa2af6e027de827d4c66c11158211ba"
+    },
+    "deploymentPending": true,
+    "reason": "This ChatGPT runtime has no access to the owner's ~/.ssh/id_ed25519; production installer requires the pinned trusted SSH transport."
+  },
+  "backups": {
+    "gitBundleAuditArtifact": "consolidation-source-review",
+    "legacyRepositories": [
+      "DruHustle/smart-factory-frontend",
+      "DruHustle/smart-factory-backend",
+      "DruHustle/smart-factory-edge"
+    ],
+    "releasesOrAssetsDetected": 0,
+    "lfsReferencesDetected": 0,
+    "standaloneIssuesDetected": 0,
+    "frontendDiscussionCommentsPreserved": 63,
+    "backupBranch": "retirement-evidence-20261104"
+  },
+  "retirement": {
+    "authorized": false,
+    "reason": "Operational backend deployment, production acceptance, rollback/recovery rehearsal, and final legacy dependency removal are still required."
+  }
+}
