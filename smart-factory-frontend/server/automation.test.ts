@@ -45,7 +45,7 @@ describe("automation integration", () => {
     process.env.AUTOMATION_ENGINE = "activepieces";
     process.env.ACTIVEPIECES_ALLOW_HTTP = "true";
     process.env.ACTIVEPIECES_WEBHOOK_URL =
-      "http://activepieces.internal/hooks/smart-factory";
+      "http://127.0.0.1:8080/hooks/smart-factory";
     process.env.ACTIVEPIECES_WEBHOOK_SECRET = "x".repeat(48);
     process.env.AUTOMATION_WEBHOOK_TIMEOUT_MS = "750";
 
