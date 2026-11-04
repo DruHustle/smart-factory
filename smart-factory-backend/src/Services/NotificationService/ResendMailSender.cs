@@ -48,6 +48,7 @@ public sealed class ResendMailSender : IEmailSender
             subject = title,
             text = body,
             html = EmailTemplate.Render(title, body, notificationId, webOrigin),
+            attachments = new[] { new { filename = EmailBrand.FileName, content = EmailBrand.Base64, content_type = "image/png", content_id = EmailBrand.ContentId } },
             headers = new Dictionary<string, string> { ["X-Smart-Factory-Notification-Id"] = notificationId.ToString() },
         });
         using var response = await client.SendAsync(request, ct);
