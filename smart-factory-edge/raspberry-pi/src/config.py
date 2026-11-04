@@ -52,6 +52,9 @@ class Settings:
     local_mqtt_device_ids: tuple[str, ...] = ()
     # Only explicitly named WROVER devices may receive bounded GPIO pulses.
     local_mqtt_control_device_ids: tuple[str, ...] = ()
+    # Node-RED sources cannot assert their own provenance or receive controls.
+    node_red_source_ids: tuple[str, ...] = ()
+    node_red_approved_live_ids: tuple[str, ...] = ()
     # ADA031 is disabled unless its exact AAS asset ID is listed here.
     ada031_control_asset_ids: tuple[str, ...] = ()
     environment: str = "development"
@@ -94,6 +97,12 @@ def load_settings() -> Settings:
             for device_id in os.getenv("LOCAL_MQTT_CONTROL_DEVICE_IDS", "").split(",")
             if device_id.strip()
         ),
+        node_red_source_ids=tuple(
+            item.strip() for item in os.getenv("NODE_RED_SOURCE_IDS", "").split(",") if item.strip()
+        ),
+        node_red_approved_live_ids=tuple(
+            item.strip() for item in os.getenv("NODE_RED_APPROVED_LIVE_IDS", "").split(",") if item.strip()
+        ),
         ada031_control_asset_ids=tuple(
             asset_id.strip()
             for asset_id in os.getenv("ADA031_CONTROL_ASSET_IDS", "").split(",")
@@ -121,6 +130,14 @@ def load_settings() -> Settings:
     if any(not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.:-]{0,63}", value) for value in
            (settings.device_id, settings.site_id, settings.line_id, *settings.local_mqtt_device_ids)):
         raise RuntimeError("MQTT identities must be safe topic segments")
+    if not set(settings.node_red_source_ids).issubset(set(settings.local_mqtt_device_ids)):
+        raise RuntimeError("NODE_RED_SOURCE_IDS must be commissioned LOCAL_MQTT_DEVICE_IDS")
+    if not set(settings.node_red_approved_live_ids).issubset(set(settings.node_red_source_ids)):
+        raise RuntimeError("NODE_RED_APPROVED_LIVE_IDS must be approved Node-RED sources")
+    if set(settings.node_red_source_ids) & set(settings.local_mqtt_control_device_ids):
+        raise RuntimeError("Node-RED sources may not receive gateway output commands")
+    if settings.node_red_source_ids and not settings.local_mqtt_enabled:
+        raise RuntimeError("Node-RED requires local broker ingress")
     if settings.publish_interval_seconds < 1 or settings.asset_poll_interval_seconds <= 0 or settings.max_queued_messages < 1:
         raise RuntimeError("Polling intervals and delivery queue capacity must be positive")
     # The application considers devices offline after 120 seconds. Leave room
