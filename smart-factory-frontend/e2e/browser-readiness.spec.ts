@@ -169,3 +169,85 @@ test("aria-hidden cannot conceal an unnamed keyboard-focusable link", async ({
     "Hidden keyboard control",
   );
 });
+
+test("a control removed during the audit cannot strand a stale nth lookup", async ({
+  page,
+}) => {
+  await page.setContent(
+    '<!doctype html><a id="transient-control" href="#target">Named temporary control</a>',
+  );
+  await page.evaluate(() => {
+    const control = document.querySelector<HTMLElement>("#transient-control")!;
+    const getAttribute = control.getAttribute.bind(control);
+    control.getAttribute = (name) => {
+      const value = getAttribute(name);
+      if (name === "role") queueMicrotask(() => control.remove());
+      return value;
+    };
+  });
+  await expect(async () => expectNamedControls(page)).toPass({
+    timeout: 15000,
+  });
+  await expect(page.locator("#transient-control")).toHaveCount(0);
+});
+
+test("reordering and restoring named neighbours cannot hide an unnamed control", async ({
+  page,
+}) => {
+  await page.setContent(`<!doctype html>
+    <a id="moving-control" href="#move" aria-label="Named moving control"><svg width="20" height="20"></svg></a>
+    <a id="unnamed-control" href="#empty"><svg width="20" height="20"></svg></a>
+    <button id="restoring-control" aria-label="Named final control">Named final control</button>`);
+  await page.evaluate(() => {
+    const control = document.querySelector<HTMLElement>("#moving-control")!;
+    const final = document.querySelector<HTMLElement>("#restoring-control")!;
+    const unnamed = document.querySelector<HTMLElement>("#unnamed-control")!;
+    const getAttribute = control.getAttribute.bind(control);
+    const finalAttribute = final.getAttribute.bind(final);
+    let moved = false;
+    control.getAttribute = (name) => {
+      const value = getAttribute(name);
+      if (name === "aria-label" && !moved) {
+        moved = true;
+        document.body.append(control);
+      }
+      return value;
+    };
+    final.getAttribute = (name) => {
+      const value = finalAttribute(name);
+      if (name === "aria-label" && moved)
+        document.body.insertBefore(control, unnamed);
+      return value;
+    };
+  });
+  await expect(expectNamedControls(page)).rejects.toThrow(
+    "Control list changed during the name audit",
+  );
+  await expect(expectNamedControls(page)).rejects.toThrow(
+    '"id":"unnamed-control"',
+  );
+});
+
+test("removing inert exposure cannot hide an unnamed control from the audit", async ({
+  page,
+}) => {
+  await page.setContent(`<!doctype html>
+    <div id="inert-group" inert><a id="exposed-control" href="#empty"><svg width="20" height="20"></svg></a></div>
+    <button id="exposer" aria-label="Named exposing control">Named exposing control</button>`);
+  await page.evaluate(() => {
+    const control = document.querySelector<HTMLElement>("#exposer")!;
+    const group = document.querySelector<HTMLElement>("#inert-group")!;
+    const getAttribute = control.getAttribute.bind(control);
+    control.getAttribute = (name) => {
+      const value = getAttribute(name);
+      if (name === "aria-label") group.removeAttribute("inert");
+      return value;
+    };
+  });
+  await expect(expectNamedControls(page)).rejects.toThrow(
+    "Control exposure changed during the name audit",
+  );
+  await expect(expectNamedControls(page)).rejects.toThrow(
+    '"id":"exposed-control"',
+  );
+});

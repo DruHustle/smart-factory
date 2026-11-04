@@ -13,7 +13,9 @@ export default defineConfig({
   outputDir: "test-results/visual-workspaces",
   workers: 1,
   retries: 0,
-  reporter: "list",
+  // Emit a failed case's assertion details as soon as it finishes, so a later
+  // job interruption cannot erase the earlier failure's diagnostic context.
+  reporter: "line",
   timeout: 60000,
   expect: { timeout: 15000 },
   use: {
