@@ -1,0 +1,55 @@
+name: Consolidation source audit
+
+# Temporary, read-only source capture for the repository migration review.
+# No deployment environments, write token, cloud credentials or deletion actions.
+on:
+  pull_request:
+    types: [opened]
+    branches: [main]
+    paths: [".github/workflows/consolidation-audit.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Capture canonical history and legacy references
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$EXPECTED_SHA" ]]
+          mkdir -p "$RUNNER_TEMP/consolidation-source-review"
+          out="$RUNNER_TEMP/consolidation-source-review"
+          git bundle create "$out/smart-factory.bundle" HEAD refs/remotes/origin/main
+          git bundle verify "$out/smart-factory.bundle"
+          printf '%s\n' "$EXPECTED_SHA" > "$out/canonical-revision.txt"
+          for component in frontend backend edge; do
+            name="smart-factory-$component"
+            git clone --mirror "https://github.com/DruHustle/$name.git" "$RUNNER_TEMP/$name.git"
+            git -C "$RUNNER_TEMP/$name.git" bundle create "$out/$name.bundle" --all
+            git -C "$RUNNER_TEMP/$name.git" bundle verify "$out/$name.bundle"
+            git -C "$RUNNER_TEMP/$name.git" show-ref > "$out/$name-refs.txt"
+            gh api --paginate --slurp "repos/DruHustle/$name/pulls?state=open&per_page=100" > "$out/$name-open-prs.json"
+          done
+          (cd "$out" && sha256sum *.bundle > bundle-sha256.txt)
+          echo 'Read-only source capture completed. This is not release qualification or a production/rollback receipt.' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: consolidation-source-review
+          path: ${{ runner.temp }}/consolidation-source-review/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 7
