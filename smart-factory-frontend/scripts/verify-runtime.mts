@@ -2,6 +2,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { promotionCompatibility } from "../shared/runtime-contract";
 import { migrationManifest } from "../server/runtimeContract";
 import { frontendFetch } from "./frontend-fetch";
+import { expectedSources } from "./expected-sources.mts";
 const origin = new URL(process.env.API_ORIGIN ?? "");
 if (
   origin.protocol !== "https:" ||
@@ -20,15 +21,11 @@ const response = await frontendFetch(new URL("/api/runtime/contract", origin), {
 if (!response.ok) throw Error("API runtime contract is unavailable");
 const contract = await response.json();
 const expected = await migrationManifest();
-const sources = JSON.parse(
-  await readFile("deploy/qualification-sources.json", "utf8"),
+const sources = expectedSources(
+  process.env.QUALIFICATION_LAYOUT,
+  process.env.EXPECTED_API_SOURCE,
+  JSON.parse(await readFile("deploy/qualification-sources.json", "utf8")),
 );
-if (
-  ![sources.backend, sources.edge].every(
-    (sha) => typeof sha === "string" && /^[a-f0-9]{40}$/.test(sha),
-  )
-)
-  throw Error("Qualified immutable companion source revisions are required");
 const error = promotionCompatibility(contract, {
   schemaDigest: expected.digest,
   ...sources,

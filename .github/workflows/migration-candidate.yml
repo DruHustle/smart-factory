@@ -20,10 +20,28 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           persist-credentials: false
-      - run: python3 -m pip install --only-binary=:all: PyYAML==6.0.3
+      - run: 'python3 -m pip install --only-binary=:all: PyYAML==6.0.3'
       - run: python3 -m unittest discover -s scripts/tests -v
       - run: python3 scripts/consolidate_workflows.py --write
       - run: python3 scripts/consolidate_workflows.py --check
+      - name: Adapt rollback source reader without weakening image verification
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path=Path('smart-factory-frontend/scripts/bundle-smoke.py')
+          text=path.read_text()
+          old="rollback_sources=json.loads((ROOT/'deploy/rollback-sources.json').read_text())"
+          new='rollback_sources=load_rollback_sources(ROOT)'
+          if old in text:
+              assert text.count(old)==1
+              text=text.replace(old,new)
+              text=text.replace('from pathlib import Path\n','from pathlib import Path\nfrom qualification.source_revisions import load_rollback_sources\n',1)
+              path.write_text(text)
+          else:
+              assert new in text and 'from qualification.source_revisions import load_rollback_sources' in text
+          PY
+          python3 -m unittest discover -s smart-factory-frontend/scripts/tests -p test_source_revisions.py -v
+          python3 -m py_compile smart-factory-frontend/scripts/bundle-smoke.py
       - name: Stage Git objects only, without changing any branch or production
         env:
           GH_TOKEN: ${{ github.token }}
@@ -35,6 +53,7 @@ jobs:
           sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()
           assert sha==os.environ['EXPECTED_SHA']
           paths=['.github/workflows/'+name for name in ('frontend-quality.yml','documentation-artifacts.yml','renderer-quality.yml')]
+          paths.append('smart-factory-frontend/scripts/bundle-smoke.py')
           entries=[{'path':p,'mode':'100644','type':'blob','content':Path(p).read_text()} for p in paths]
           base=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip()
           result=subprocess.run(['gh','api','--method','POST','repos/DruHustle/smart-factory/git/trees','--input','-'],input=json.dumps({'base_tree':base,'tree':entries}),text=True,capture_output=True,check=True)
