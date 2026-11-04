@@ -1,6 +1,91 @@
 import { expect, test } from "@playwright/test";
 import { selectDataWorkspace, withRpcResult } from "./readiness-helpers";
 import { expectNamedControls } from "./ui-audit-helpers";
+import {
+  expectAllFloorItems,
+  floorItemSnapshot,
+} from "./visual-workspace-helpers";
+
+test("floor readiness observes both counts in the same render", async ({
+  page,
+}) => {
+  await page.setContent(
+    '<div data-testid="factory-floor" data-total-items="1" data-visible-items="1">Fixture floor</div>',
+  );
+  const floor = page.getByTestId("factory-floor");
+  await floor.evaluate((element) => {
+    const original = element.getAttribute.bind(element);
+    element.getAttribute = (name) => {
+      const value = original(name);
+      if (name === "data-total-items") {
+        // A render between protocol round trips changes both counts together.
+        // The old separately awaited reads always compare N with N+1 here.
+        queueMicrotask(() => {
+          const next = String(Number(value) + 1);
+          element.setAttribute("data-total-items", next);
+          element.setAttribute("data-visible-items", next);
+        });
+      }
+      return value;
+    };
+  });
+  await expectAllFloorItems(floor);
+  const snapshot = await floorItemSnapshot(floor);
+  expect(snapshot.complete).toBe(true);
+  expect(snapshot.total).toBe(snapshot.visible);
+});
+
+test("floor readiness refuses empty, absent and incomplete item counts", async ({
+  page,
+}) => {
+  await page.setContent('<div data-testid="factory-floor">Fixture floor</div>');
+  const floor = page.getByTestId("factory-floor");
+  for (const [total, visible] of [
+    [null, null],
+    ["0", "0"],
+    ["52", "51"],
+    ["52", null],
+  ] as const) {
+    await floor.evaluate(
+      (element, counts) => {
+        for (const [name, value] of Object.entries(counts)) {
+          if (value === null) element.removeAttribute(name);
+          else element.setAttribute(name, value);
+        }
+      },
+      { "data-total-items": total, "data-visible-items": visible },
+    );
+    expect(await floorItemSnapshot(floor)).toEqual({
+      matches: 1,
+      total,
+      visible,
+      complete: false,
+    });
+  }
+  await floor.evaluate((element) => {
+    element.setAttribute("data-total-items", "52");
+    element.setAttribute("data-visible-items", "52");
+  });
+  await expectAllFloorItems(floor);
+  await page.setContent(
+    '<div data-testid="factory-floor" data-total-items="52" data-visible-items="52"></div>'.repeat(
+      2,
+    ),
+  );
+  expect(await floorItemSnapshot(floor)).toEqual({
+    matches: 2,
+    total: null,
+    visible: null,
+    complete: false,
+  });
+  await page.setContent("<main>No floor mounted</main>");
+  expect(await floorItemSnapshot(floor)).toEqual({
+    matches: 0,
+    total: null,
+    visible: null,
+    complete: false,
+  });
+});
 
 function gate() {
   let release!: () => void;
@@ -191,38 +276,68 @@ test("a control removed during the audit cannot strand a stale nth lookup", asyn
   await expect(page.locator("#transient-control")).toHaveCount(0);
 });
 
-test("reordering and restoring named neighbours cannot hide an unnamed control", async ({
+test("a transient reorder invalidates the audit before a fresh unnamed-control check", async ({
   page,
 }) => {
   await page.setContent(`<!doctype html>
     <a id="moving-control" href="#move" aria-label="Named moving control"><svg width="20" height="20"></svg></a>
-    <a id="unnamed-control" href="#empty"><svg width="20" height="20"></svg></a>
+    <a id="unnamed-control" href="#empty" aria-label="Named before the negative check"><svg width="20" height="20"></svg></a>
     <button id="restoring-control" aria-label="Named final control">Named final control</button>`);
+  // First isolate the transient-mutation guard from an earlier genuine name
+  // failure. The second audit below still has to reject the unnamed anchor.
+  await expectNamedControls(page);
   await page.evaluate(() => {
     const control = document.querySelector<HTMLElement>("#moving-control")!;
     const final = document.querySelector<HTMLElement>("#restoring-control")!;
     const unnamed = document.querySelector<HTMLElement>("#unnamed-control")!;
-    const getAttribute = control.getAttribute.bind(control);
     const finalAttribute = final.getAttribute.bind(final);
-    let moved = false;
-    control.getAttribute = (name) => {
-      const value = getAttribute(name);
-      if (name === "aria-label" && !moved) {
-        moved = true;
+    const orders: string[][] = [];
+    (window as any).__auditReorderProof = orders;
+    document.addEventListener(
+      "fixture:reorder-and-restore",
+      () => {
         document.body.append(control);
-      }
-      return value;
-    };
+        orders.push(
+          Array.from(document.body.children, (element) => element.id),
+        );
+        document.body.insertBefore(control, unnamed);
+        orders.push(
+          Array.from(document.body.children, (element) => element.id),
+        );
+      },
+      { once: true },
+    );
     final.getAttribute = (name) => {
       const value = finalAttribute(name);
-      if (name === "aria-label" && moved)
-        document.body.insertBefore(control, unnamed);
+      if (name === "role") {
+        final.getAttribute = finalAttribute;
+        // The helper reads role in its own metadata evaluation. The browser's
+        // isolated accessible-name engine need not call a page-world override.
+        // Run after that complete snapshot, while its observer is active.
+        queueMicrotask(() =>
+          document.dispatchEvent(new Event("fixture:reorder-and-restore")),
+        );
+      }
       return value;
     };
   });
   await expect(expectNamedControls(page)).rejects.toThrow(
     "Control list changed during the name audit",
   );
+  expect(
+    await page.evaluate(() => (window as any).__auditReorderProof),
+  ).toEqual([
+    ["unnamed-control", "restoring-control", "moving-control"],
+    ["moving-control", "unnamed-control", "restoring-control"],
+  ]);
+  expect(
+    await page
+      .locator("body > a, body > button")
+      .evaluateAll((elements) => elements.map((element) => element.id)),
+  ).toEqual(["moving-control", "unnamed-control", "restoring-control"]);
+  await page
+    .locator("#unnamed-control")
+    .evaluate((element) => element.removeAttribute("aria-label"));
   await expect(expectNamedControls(page)).rejects.toThrow(
     '"id":"unnamed-control"',
   );
@@ -234,19 +349,52 @@ test("removing inert exposure cannot hide an unnamed control from the audit", as
   await page.setContent(`<!doctype html>
     <div id="inert-group" inert><a id="exposed-control" href="#empty"><svg width="20" height="20"></svg></a></div>
     <button id="exposer" aria-label="Named exposing control">Named exposing control</button>`);
+  await expectNamedControls(page);
   await page.evaluate(() => {
     const control = document.querySelector<HTMLElement>("#exposer")!;
     const group = document.querySelector<HTMLElement>("#inert-group")!;
     const getAttribute = control.getAttribute.bind(control);
+    const proof = {
+      events: 0,
+      before: group.hasAttribute("inert"),
+      after: true,
+    };
+    (window as any).__auditExposureProof = proof;
+    document.addEventListener(
+      "fixture:expose-control",
+      () => {
+        group.removeAttribute("inert");
+        proof.events++;
+        proof.after = group.hasAttribute("inert");
+      },
+      { once: true },
+    );
     control.getAttribute = (name) => {
       const value = getAttribute(name);
-      if (name === "aria-label") group.removeAttribute("inert");
+      if (name === "role") {
+        control.getAttribute = getAttribute;
+        queueMicrotask(() =>
+          document.dispatchEvent(new Event("fixture:expose-control")),
+        );
+      }
       return value;
     };
   });
   await expect(expectNamedControls(page)).rejects.toThrow(
     "Control exposure changed during the name audit",
   );
+  expect(
+    await page.evaluate(() => (window as any).__auditExposureProof),
+  ).toEqual({
+    events: 1,
+    before: true,
+    after: false,
+  });
+  expect(
+    await page
+      .locator("#inert-group")
+      .evaluate((element) => element.hasAttribute("inert")),
+  ).toBe(false);
   await expect(expectNamedControls(page)).rejects.toThrow(
     '"id":"exposed-control"',
   );
