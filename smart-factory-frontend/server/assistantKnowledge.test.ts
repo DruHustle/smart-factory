@@ -133,6 +133,10 @@ describe("Smart Factory documentation assistant", () => {
       expect(
         result.sources.every((source) => source.kind === "documentation"),
       ).toBe(true);
+      expect(result.sources.map((source) => source.href)).toEqual([
+        "https://github.com/DruHustle/smart-factory/blob/main/smart-factory-frontend/docs/operations.md",
+        "https://github.com/DruHustle/smart-factory/blob/main/smart-factory-frontend/docs/assistant-concepts.md",
+      ]);
       expect(result.answer).toMatch(/acquisition time, receipt time/);
       expect(result.answer).toContain("configured freshness");
       expect(result.answer).toContain("gateway heartbeat is not a substitute");

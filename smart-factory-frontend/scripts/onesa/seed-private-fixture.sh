@@ -3,9 +3,12 @@
 # worker must remain disabled; never source this script into their environment.
 set -euo pipefail
 cd "$(dirname "$0")/../.."
-[[ "${E2E_ONESA_PRIVATE:-false}" == true ]]
-[[ "${NODE_ENV:-}" != production ]]
-[[ "${DATABASE_URL:-}" == postgres://postgres:postgres@127.0.0.1:55432/smart_factory_e2e ]]
+if [[ "${E2E_ONESA_PRIVATE:-false}" != true ]] ||
+   [[ "${NODE_ENV:-}" == production ]] ||
+   [[ "${DATABASE_URL:-}" != postgres://postgres:postgres@127.0.0.1:55432/smart_factory_e2e ]]; then
+  echo 'Private fixture requires the isolated test database and a non-production environment.' >&2
+  exit 1
+fi
 export ONESA_ENABLED=true
 export ONESA_INSTALLATION_ID=53ded05b-c1aa-4faa-aa65-4747637baac0
 export ONESA_WORKSPACE_ID=proposed-test-workspace

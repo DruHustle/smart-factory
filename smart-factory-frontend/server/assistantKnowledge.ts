@@ -661,7 +661,7 @@ function buildSources(
     title: section.source.title,
     section: section.heading,
     path: section.source.route,
-    href: `https://github.com/DruHustle/smart-factory-frontend/blob/main/${section.source.route}`,
+    href: `https://github.com/DruHustle/smart-factory/blob/main/smart-factory-frontend/${section.source.route}`,
     excerpt: excerptFor(section, terms),
     kind: "documentation",
   }));

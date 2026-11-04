@@ -126,7 +126,7 @@ try {
       const [filename, anchor] = href.split("#");
       const relative = path.relative(repositoryRoot, path.resolve(docsDirectory, decodeURIComponent(filename)));
       if (relative.startsWith("..")) throw new Error(`PDF link escapes repository: ${href}`);
-      return [href, `https://github.com/DruHustle/smart-factory-frontend/blob/main/${relative.split(path.sep).map(encodeURIComponent).join("/")}${anchor ? `#${anchor}` : ""}`];
+      return [href, `https://github.com/DruHustle/smart-factory/blob/main/smart-factory-frontend/${relative.split(path.sep).map(encodeURIComponent).join("/")}${anchor ? `#${anchor}` : ""}`];
     }));
     await page.locator("a[href]").evaluateAll((nodes, replacements) => {
       for (const node of nodes) {
