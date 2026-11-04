@@ -224,7 +224,7 @@ def mail_summary(api, worker):
         data.update(usernamePresent=bool(worker.get("SMTP_USERNAME")),
                     passwordPresent=bool(worker.get("SMTP_PASSWORD")),
                     senderPresent=bool(worker.get("SMTP_FROM")),
-                    hostPresent=bool(worker.get("SMTP_HOST", "smtp.gmail.com")),
+                    hostPresent=bool(worker.get("SMTP_HOST", "")),
                     portInRange=1 <= port <= 65535,
                     allowAllRecipients=str(worker.get("SMTP_ALLOW_ALL_RECIPIENTS", "")).lower() == "true",
                     allowedDomainCount=csv_count(worker.get("SMTP_ALLOWED_RECIPIENT_DOMAINS")),

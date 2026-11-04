@@ -15,7 +15,7 @@ This repository contains five .NET services. Production packages them with the N
 | TelemetryService | Durable MQTT ingestion, dashboard retry outbox and health | Worker health on VM 127.0.0.1:10001 |
 | IdentityService | Existing dashboard account profile and current roles | Private 127.0.0.1:3104 |
 | AnalyticsService | SQL sample coverage, gaps and null-safe observed metric summaries | Private 127.0.0.1:3105 |
-| NotificationService | Durable incident and account-email delivery through Gmail SMTP or future Resend | Private 127.0.0.1:3106 |
+| NotificationService | Durable incident and account-email delivery through Resend | Private 127.0.0.1:3106 |
 
 Dashboard accounts remain the identity authority. No separate Entra SSO account store is required. SMTP/Resend credentials are used only for notification delivery; Entra client credentials are reserved for company AAS OAuth integrations. Dashboard roles are reloaded at each private identity/analytics request; anonymous service calls are rejected. Notifications use the shared PostgreSQL inbox/queue and never accept arbitrary email recipients from public requests.
 

@@ -15,11 +15,11 @@ public sealed class SmtpMailSender : IEmailSender
     private readonly HashSet<string> recipients;
 
     public bool Configured => sender is not null && password.Length > 0;
-    public string Provider => "Gmail SMTP";
+    public string Provider => "SMTP";
 
     public SmtpMailSender(IConfiguration configuration)
     {
-        host = configuration["SMTP_HOST"] ?? "smtp.gmail.com";
+        host = configuration["SMTP_HOST"] ?? "";
         port = int.TryParse(configuration["SMTP_PORT"], out var configuredPort) ? configuredPort : 587;
         username = configuration["SMTP_USERNAME"] ?? "";
         password = configuration["SMTP_PASSWORD"] ?? "";

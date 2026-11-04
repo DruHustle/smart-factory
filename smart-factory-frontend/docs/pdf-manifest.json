@@ -9,8 +9,8 @@
     },
     "api-flows.pdf": {
       "source": "api-flows.md",
-      "sourceSha256": "6befc43027a0b60919de96781faa39b6a21360b467b5b853c6bdb11991b62c0d",
-      "pdfSha256": "0f7386ebebc50bd0ca564e61e46523b33c31de7d824291d7b6b8e23c5e4fad24"
+      "sourceSha256": "a22bfb44efd876cb38ae0b331606c4a1c948a115f0e8a9c114d29e49a81ffc2f",
+      "pdfSha256": "ffc65be9992d961da33c99fad4389461c08a1c93c6315041cee8e222cfb72190"
     },
     "database-schema.pdf": {
       "source": "database-schema.md",

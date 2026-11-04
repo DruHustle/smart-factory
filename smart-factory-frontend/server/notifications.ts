@@ -104,7 +104,7 @@ export function notificationConfiguration() {
     provider === "ses"
       ? "Amazon SES"
       : provider === "smtp"
-        ? "Gmail SMTP"
+        ? "SMTP"
         : "Resend";
   return [
     {
