@@ -27,9 +27,11 @@ function webhookUrl(value: string | undefined, allowHttp: boolean) {
   if (!value) return null;
   try {
     const parsed = new URL(value);
-    if (parsed.username || parsed.password) return null;
+    if (parsed.username || parsed.password || parsed.hash || parsed.search) return null;
     if (parsed.protocol === "https:") return parsed.toString();
-    if (allowHttp && parsed.protocol === "http:") return parsed.toString();
+    if (allowHttp && parsed.protocol === "http:" &&
+        ["127.0.0.1", "localhost", "::1"].includes(parsed.hostname))
+      return parsed.toString();
   } catch {
     // Configuration status reports invalid URLs without leaking the value.
   }
@@ -41,7 +43,8 @@ export function automationConfiguration(): AutomationConfiguration {
     .trim()
     .toLowerCase();
   const engine = requested === "activepieces" ? "activepieces" : "disabled";
-  const allowHttp = process.env.ACTIVEPIECES_ALLOW_HTTP === "true";
+  const allowHttp = process.env.NODE_ENV !== "production" &&
+    process.env.ACTIVEPIECES_ALLOW_HTTP === "true";
   const url = webhookUrl(process.env.ACTIVEPIECES_WEBHOOK_URL, allowHttp);
   const secret = process.env.ACTIVEPIECES_WEBHOOK_SECRET ?? "";
   return {
