@@ -161,7 +161,7 @@ export async function updateIncidentAction(
   actorId: number,
 ) {
   const db = await visibleIncident(input.id);
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await validateOwner(tx, input.ownerId);
     const [action] = await tx.execute(sql`
       update incident_actions set owner_id=${input.ownerId}, due_date=${input.dueDate}::date,
