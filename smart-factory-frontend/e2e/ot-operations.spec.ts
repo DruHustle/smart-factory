@@ -7,6 +7,7 @@ import {
   type OperationsSummary,
 } from "../shared/operations";
 import { enterSimulation, noOverflow, rpc } from "./visual-workspace-helpers";
+import { selectDataWorkspace, signInToOverview } from "./readiness-helpers";
 
 // The public demo runner seeds only disposable, synthetic accounts and records.
 // These journeys exercise the real HTTP service; they do not mock authorization.
@@ -28,13 +29,12 @@ async function liveLogin(page: Page, role: "engineer" | "operator" | "viewer") {
   await page
     .getByLabel("Password", { exact: true })
     .fill("Synthetic-security-only-2026!");
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await signInToOverview(page, `security-${role}@example.test`);
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
   const workspace = page.getByRole("combobox", { name: "Data workspace" });
-  if ((await workspace.inputValue()) !== "live")
-    await workspace.selectOption("live");
+  await selectDataWorkspace(page, "live");
   await expect(workspace).toHaveValue("live");
 }
 async function screenshot(page: Page, name: string) {

@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 export DOTENV_CONFIG_PATH=/dev/null
+export SYSTEM_E2E=true
 unset ONESA_ENABLED ONESA_SERVICE_TOKEN ONESA_INGESTION_URL
 compose=(docker compose --env-file /dev/null -p "${E2E_COMPOSE_PROJECT:-smart-factory-e2e}" -f docker-compose.e2e.yml)
 mock_aas_pid=""
