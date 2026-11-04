@@ -166,6 +166,22 @@ function Integrations() {
                   </li>
                 )}
                 <li className="flex items-center justify-between gap-3 py-3">
+                  <span>Node-RED OT integration</span>
+                  <Badge variant="outline">
+                    {summary.data?.automation.nodeRed.enabled
+                      ? "Enabled · edge health not verified"
+                      : "Not enabled"}
+                  </Badge>
+                </li>
+                <li className="flex items-center justify-between gap-3 py-3">
+                  <span>Activepieces business automation</span>
+                  <Badge variant="outline">
+                    {summary.data?.automation.activepieces.configured
+                      ? "Configured · delivery not verified"
+                      : "Not configured"}
+                  </Badge>
+                </li>
+                <li className="flex items-center justify-between gap-3 py-3">
                   <span>AAS provisioning</span>
                   <Badge variant="outline">
                     {summary.data?.aasProvisioningConfigured
