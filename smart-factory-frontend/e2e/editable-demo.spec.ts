@@ -1,5 +1,16 @@
 import { test, expect, type Page } from "@playwright/test";
 import { enterSimulation, noOverflow } from "./visual-workspace-helpers";
+const sessionIsolationTest = test.extend<{ separatePage: Page }>({
+  separatePage: async ({ browser }, use) => {
+    const context = await browser.newContext();
+    try {
+      await use(await context.newPage());
+    } finally {
+      // Fixture teardown cannot replace a failed body with its close error.
+      await context.close();
+    }
+  },
+});
 async function ask(page: Page, text: string) {
   const count = await page.getByTestId("assistant-answer-content").count();
   await page
@@ -30,10 +41,9 @@ test("Assistant handles the reported question and coherent follow-ups without ma
   ).toContainText("Real timing claims need compatible hardware");
   await noOverflow(page);
 });
-test("editable demo persists, respects roles, informs the assistant, prints and resets", async ({
-  page,
-  browser,
-}) => {
+// Each journey creates its own browser-local equipment through the real UI;
+// none depends on a previous test's storage, role, export or selected item.
+async function createDemoPump(page: Page) {
   await enterSimulation(page);
   await page.goto("/#/sandbox?tab=inventory");
   await expect(
@@ -52,6 +62,12 @@ test("editable demo persists, respects roles, informs the assistant, prints and 
   await page
     .getByLabel("Demo equipment", { exact: true })
     .selectOption({ label: "Acceptance pump · asset" });
+}
+
+test("editable demo roles and incident persistence inform the Assistant's latest reading", async ({
+  page,
+}) => {
+  await createDemoPump(page);
   await page
     .getByRole("button", { name: "Telemetry & incidents", exact: true })
     .click();
@@ -97,6 +113,12 @@ test("editable demo persists, respects roles, informs the assistant, prints and 
   const latest = await ask(page, "What is Acceptance pump temperature?");
   await expect(latest).toContainText("95 °C");
   await expect(latest).not.toContainText("85 °C");
+});
+
+test("editable demo prints its passport and completes simulated firmware and security decisions", async ({
+  page,
+}) => {
+  await createDemoPump(page);
   await page.goto("/#/sandbox?tab=passport");
   await page
     .getByLabel("Demo equipment", { exact: true })
@@ -152,6 +174,12 @@ test("editable demo persists, respects roles, informs the assistant, prints and 
       .getByRole("article")
       .filter({ hasText: "Simulated software review finding" }),
   ).toContainText("investigated");
+});
+
+test("editable demo exports its own bytes and restores them after a persistent reset", async ({
+  page,
+}) => {
+  await createDemoPump(page);
   await page
     .getByRole("button", { name: "Users & settings", exact: true })
     .click();
@@ -169,17 +197,6 @@ test("editable demo persists, respects roles, informs the assistant, prints and 
       (i: any) => i.name === "Acceptance pump",
     ),
   ).toBe(true);
-  const independent = await browser.newContext();
-  try {
-    const separate = await independent.newPage();
-    await enterSimulation(separate);
-    await separate.goto("/#/sandbox?tab=inventory");
-    await expect(
-      separate.getByLabel("Demo equipment", { exact: true }),
-    ).not.toContainText("Acceptance pump");
-  } finally {
-    await independent.close();
-  }
   await page.getByRole("button", { name: "Reset demo", exact: true }).click();
   await page
     .getByRole("button", { name: "Reset this demo workspace", exact: true })
@@ -211,6 +228,21 @@ test("editable demo persists, respects roles, informs the assistant, prints and 
   await page.setViewportSize({ width: 390, height: 844 });
   await noOverflow(page);
 });
+
+sessionIsolationTest(
+  "editable demo equipment remains absent from an independent browser session",
+  async ({ page, separatePage }) => {
+    await createDemoPump(page);
+    await expect(
+      page.getByLabel("Demo equipment", { exact: true }),
+    ).toContainText("Acceptance pump");
+    await enterSimulation(separatePage);
+    await separatePage.goto("/#/sandbox?tab=inventory");
+    await expect(
+      separatePage.getByLabel("Demo equipment", { exact: true }),
+    ).not.toContainText("Acceptance pump");
+  },
+);
 
 test("reference demo passports print approved fields while anonymous previews remain private", async ({
   page,
