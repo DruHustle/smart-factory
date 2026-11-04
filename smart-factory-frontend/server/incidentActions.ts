@@ -150,7 +150,6 @@ export async function createIncidentAction(
     actionId: result.id,
     actorId,
     ownerId: input.ownerId,
-    title: input.title,
     dueDate: input.dueDate,
     status: "open",
   });
@@ -197,7 +196,6 @@ export async function updateIncidentAction(
     ownerId: input.ownerId,
     dueDate: input.dueDate,
     status: input.status,
-    outcome: input.outcome,
     version: result.version,
   });
   return result;
