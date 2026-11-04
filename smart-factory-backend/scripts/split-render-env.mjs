@@ -14,12 +14,11 @@ for (const line of source.split(/\r?\n/)) {
   }
 }
 const defaults = new Map([
-  ["EMAIL_PROVIDER", "ses"],
-  ["SES_ENABLED", "true"],
-  ["SES_REGION", "us-east-1"],
-  ["SES_FROM", "Smart Factory <smartfactory.notifications@gmail.com>"],
-  ["SES_ALLOW_ALL_RECIPIENTS", "false"],
-  ["SES_ALLOWED_RECIPIENTS", "smartfactory.notifications@gmail.com"],
+  ["EMAIL_PROVIDER", "resend"],
+  ["EMAIL_DELIVERY_CONFIGURED", "false"],
+  ["RESEND_FROM", "Smart Factory <notifications-factory@onesa.eu>"],
+  ["RESEND_ALLOWED_RECIPIENT_DOMAINS", "onesa.eu"],
+  ["SES_ENABLED", "false"],
 ]);
 
 const apiKeys = [
@@ -35,6 +34,8 @@ const apiKeys = [
   "AAS_OIDC_SCOPE", "AAS_REPOSITORY_REGISTRY_INTEGRATION",
   "AAS_ALLOW_UNAUTHENTICATED_LOCAL", "AAS_ALLOW_UNAUTHENTICATED_PRIVATE",
   "ENABLE_DEMO_ACCOUNTS", "ENABLE_DEMO_DATA",
+  "EMAIL_PROVIDER", "EMAIL_DELIVERY_CONFIGURED", "PASSWORD_RESET_ORIGIN",
+  "BACKEND_DEPLOYMENT_MODE",
 ];
 const workerKeys = [
   "ASPNETCORE_ENVIRONMENT", "DASHBOARD_API_ORIGIN", "DATABASE_URL",
@@ -44,6 +45,10 @@ const workerKeys = [
   "MqttHeartbeatTopic", "EMAIL_PROVIDER", "SES_ENABLED", "SES_REGION",
   "SES_FROM", "SES_ALLOW_ALL_RECIPIENTS", "SES_ALLOWED_RECIPIENTS",
   "SES_ALLOWED_RECIPIENT_DOMAINS", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY",
+  "RESEND_API_KEY", "RESEND_FROM", "RESEND_ALLOWED_RECIPIENT_DOMAINS",
+  "PASSWORD_RESET_ORIGIN",
+  "SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM",
+  "SMTP_ALLOW_ALL_RECIPIENTS", "SMTP_ALLOWED_RECIPIENTS", "SMTP_ALLOWED_RECIPIENT_DOMAINS",
 ];
 
 function render(role, keys) {
