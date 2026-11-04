@@ -1,5 +1,34 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { resetDemoViewerFixtureLoginLimit } from "./fixture-auth";
+
+export async function floorItemSnapshot(floor: Locator) {
+  // Both attributes describe one render. Separate awaited browser calls can
+  // observe different renders, especially while software-GPU work is queued.
+  // Query and sample together, without a nested locator wait when a render
+  // replaces the node. Missing or duplicate floors remain an incomplete result.
+  return floor.evaluateAll((elements) => {
+    const element = elements.length === 1 ? elements[0] : undefined;
+    const total = element?.getAttribute("data-total-items") ?? null,
+      visible = element?.getAttribute("data-visible-items") ?? null;
+    return {
+      matches: elements.length,
+      total,
+      visible,
+      complete: Number(total) > 0 && Number(total) === Number(visible),
+    };
+  });
+}
+
+export async function expectAllFloorItems(floor: Locator) {
+  await expect
+    .poll(async () => {
+      const snapshot = await floorItemSnapshot(floor);
+      // Keep the observed counts in a failed assertion, rather than only false.
+      return snapshot.complete ? "ready" : JSON.stringify(snapshot);
+    })
+    .toBe("ready");
+}
+
 export async function enterSimulation(
   page: Page,
   width = 1440,
@@ -23,15 +52,7 @@ export async function enterSimulation(
   ).toBeVisible();
   const floor = page.getByTestId("factory-floor");
   await expect(floor).toBeVisible();
-  await expect
-    .poll(async () => {
-      const total = Number(await floor.getAttribute("data-total-items"));
-      return (
-        total > 0 &&
-        total === Number(await floor.getAttribute("data-visible-items"))
-      );
-    })
-    .toBe(true);
+  await expectAllFloorItems(floor);
   return (await (await page.request.get("/api/trpc/system.showcase")).json())
     .result.data.json;
 }

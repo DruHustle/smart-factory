@@ -1,0 +1,104 @@
+name: Factory controlled production frontend
+run-name: Factory production ${{ inputs.expected_sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      expected_sha:
+        description: Exact qualified current main revision, already installed on the API
+        required: true
+        type: string
+      previous_deployment:
+        description: Reviewed current Vercel production deployment ID to retain for rollback
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: factory-monorepo-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.repository == 'DruHustle/smart-factory' && github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_SHA: ${{ inputs.expected_sha }}
+      EXPECTED_API_SOURCE: ${{ inputs.expected_sha }}
+      QUALIFICATION_LAYOUT: monorepo
+      API_ORIGIN: ${{ vars.SMART_FACTORY_API_ORIGIN }}
+      RELEASE_ORIGIN: ${{ vars.SMART_FACTORY_UI_ORIGIN }}
+      VITE_API_URL: /api
+      VITE_ENABLE_DEMO_ACCOUNTS: "true"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Require explicit cutover enablement and every exact-source qualification
+        env:
+          ENABLED: ${{ vars.SMART_FACTORY_MONOREPO_PRODUCTION_ENABLED }}
+          LEGACY_FROZEN: ${{ vars.SMART_FACTORY_LEGACY_DEPLOYMENT_FROZEN }}
+        run: |
+          set -euo pipefail
+          [[ "$ENABLED" == true && "$LEGACY_FROZEN" == true ]]
+          [[ "$RELEASE_SHA" == "$GITHUB_SHA" ]]
+          [[ -n "$API_ORIGIN" && -n "$RELEASE_ORIGIN" ]]
+          python3 scripts/release_gate.py --revision "$RELEASE_SHA"
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 10.34.5
+          package_json_file: smart-factory-frontend/package.json
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: smart-factory-frontend/pnpm-lock.yaml
+      - run: pnpm --dir smart-factory-frontend install --frozen-lockfile
+      - name: Require the installed API before preparing the frontend
+        working-directory: smart-factory-frontend
+        run: |
+          set -euo pipefail
+          pnpm vercel:configure
+          node --import tsx scripts/verify-runtime.mts
+          node --import tsx scripts/check-frontend-http.mts
+      - name: Build, stage, verify and explicitly promote the exact artifact
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          PREVIOUS_DEPLOYMENT: ${{ inputs.previous_deployment }}
+        run: |
+          set -euo pipefail
+          for key in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            [[ -n "${!key}" ]] || { echo "Missing release configuration: $key"; exit 1; }
+          done
+          python3 scripts/vercel_release_guard.py project --previous "$PREVIOUS_DEPLOYMENT"
+          # Vercel CLI runs at the monorepo root; its verified rootDirectory selects the frontend.
+          pnpm dlx vercel@62.2.0 pull --yes --environment=production --token="$VERCEL_TOKEN"
+          pnpm dlx vercel@62.2.0 build --prod --token="$VERCEL_TOKEN"
+          python3 scripts/release_gate.py --revision "$RELEASE_SHA"
+          (cd smart-factory-frontend && node --import tsx scripts/verify-runtime.mts)
+          pnpm dlx vercel@62.2.0 deploy --prebuilt --archive=tgz --prod --skip-domain --yes --token="$VERCEL_TOKEN" --meta "githubCommitSha=$RELEASE_SHA" --meta githubCommitRef=main > "$RUNNER_TEMP/staged-url.txt"
+          export STAGED_ORIGIN="$(tail -n 1 "$RUNNER_TEMP/staged-url.txt")"
+          python3 scripts/vercel_release_guard.py stage --origin "$STAGED_ORIGIN" --revision "$RELEASE_SHA"
+          (cd smart-factory-frontend && node --import tsx scripts/verify-staged-release.mts)
+          python3 scripts/release_gate.py --revision "$RELEASE_SHA"
+          python3 scripts/vercel_release_guard.py project --previous "$PREVIOUS_DEPLOYMENT"
+          printf 'Retained prior production deployment: `%s`\n' "$PREVIOUS_DEPLOYMENT" >> "$GITHUB_STEP_SUMMARY"
+          printf 'Validated staged deployment: `%s`\n' "$STAGED_ORIGIN" >> "$GITHUB_STEP_SUMMARY"
+          pnpm dlx vercel@62.2.0 promote "$STAGED_ORIGIN" --yes --token="$VERCEL_TOKEN"
+          (cd smart-factory-frontend && node --import tsx scripts/check-frontend-http.mts && node --import tsx scripts/verify-release.mts)
+          (cd smart-factory-frontend && API_ORIGIN="$RELEASE_ORIGIN" RUNTIME_EVIDENCE_FILE="$RUNNER_TEMP/deployed-api-runtime.json" node --import tsx scripts/verify-runtime.mts)
+          echo 'Production frontend checks passed. This is not a production rollback receipt or repository-retirement authorization.' >> "$GITHUB_STEP_SUMMARY"
+      - name: Retain only non-secret runtime verification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: production-runtime-contract
+          path: ${{ runner.temp }}/deployed-api-runtime.json
+          if-no-files-found: ignore
+          retention-days: 7

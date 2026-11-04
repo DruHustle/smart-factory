@@ -4,7 +4,12 @@ const e2ePort = Number(process.env.E2E_PORT || "3000");
 
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: ["system.spec.ts", "ui-audit.spec.ts", "passport-ada031.spec.ts"],
+  testMatch: [
+    "system.spec.ts",
+    "ui-audit.spec.ts",
+    "passport-ada031.spec.ts",
+    "browser-readiness.spec.ts",
+  ],
   // These workflows intentionally exercise one shared database and mutate the
   // same disposable fixture records. Serial execution keeps the suite deterministic locally
   // as well as in CI.

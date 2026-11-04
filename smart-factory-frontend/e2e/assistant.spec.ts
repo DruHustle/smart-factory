@@ -1,4 +1,4 @@
-import { test, expect, type Route } from "@playwright/test";
+import { test, expect, type Page, type Route } from "@playwright/test";
 import { mkdirSync } from "node:fs";
 import { enterSimulation, noOverflow, rpc } from "./visual-workspace-helpers";
 const out =
@@ -318,6 +318,7 @@ test("Assistant handles unavailable WebGL and clears sensitive state on logout",
   await page.addInitScript(() => {
     const original = HTMLCanvasElement.prototype.getContext;
     HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
       kind: any,
       ...args: any[]
     ) {
@@ -347,17 +348,26 @@ test("Assistant handles unavailable WebGL and clears sensitive state on logout",
 for (const [width, theme] of [
   [1440, "light"],
   [390, "dark"],
-] as const)
-  test(`record graphical Assistant inspection ${width} ${theme}`, async ({
-    browser,
-  }) => {
-    mkdirSync(out, { recursive: true });
-    const context = await browser.newContext({
+] as const) {
+  const graphicalTest = test.extend<{ graphicalPage: Page }>({
+    graphicalPage: async ({ browser }, use) => {
+      mkdirSync(out, { recursive: true });
+      const context = await browser.newContext({
         recordVideo: { dir: out, size: { width, height: 960 } },
         viewport: { width, height: 960 },
-      }),
-      page = await context.newPage();
-    try {
+      });
+      try {
+        await use(await context.newPage());
+      } finally {
+        // Teardown saves the video separately from the primary test failure.
+        await context.close();
+      }
+    },
+  });
+  graphicalTest(
+    `record graphical Assistant evidence ${width} ${theme}`,
+    async ({ graphicalPage: page }) => {
+      mkdirSync(out, { recursive: true });
       await enterSimulation(page, width, theme);
       await page.goto("/#/assistant");
       await expect(
@@ -379,6 +389,24 @@ for (const [width, theme] of [
       await expect(page.locator("[data-state=ready]")).toBeVisible({
         timeout: 30000,
       });
+    },
+  );
+
+  graphicalTest(
+    `open graphical Assistant answer inspection ${width} ${theme}`,
+    async ({ graphicalPage: page }) => {
+      // This is a separate owned conversation, not a guessed inventory URL or
+      // state inherited from the screenshot test. Keep the real evidence link.
+      await enterSimulation(page, width, theme);
+      await page.goto("/#/assistant");
+      await expect(
+        page.getByRole("heading", {
+          name: "What would you like to understand?",
+        }),
+      ).toBeVisible();
+      await ask(page);
+      if (width < 1280)
+        await page.getByRole("button", { name: /Sources & context/ }).click();
       await page
         .getByRole("link", { name: "Open 3D inspection", exact: true })
         .click();
@@ -392,10 +420,9 @@ for (const [width, theme] of [
       await expect(
         page.getByRole("button", { name: "Reassemble", exact: true }),
       ).toBeVisible();
-    } finally {
-      await context.close();
-    }
-  });
+    },
+  );
+}
 
 test("asset links update the next question while retaining drafts and previous answer context", async ({
   page,

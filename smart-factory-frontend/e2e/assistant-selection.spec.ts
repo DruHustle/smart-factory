@@ -1,4 +1,5 @@
 import { test, expect, type Page, type Route } from "@playwright/test";
+import { selectDataWorkspace, signInToOverview } from "./readiness-helpers";
 
 test.skip(
   process.env.WORKSPACE_E2E !== "true",
@@ -11,7 +12,7 @@ async function login(page: Page) {
   await page
     .getByLabel("Password", { exact: true })
     .fill("Synthetic-security-only-2026!");
-  await page.getByRole("button", { name: /^sign in$/i }).click();
+  await signInToOverview(page, "security-viewer@example.test");
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
@@ -193,9 +194,7 @@ test("switching data workspace cancels an answer and clears its previous private
   const aborted = page.waitForEvent("requestfailed", {
     predicate: (request) => request.url().includes("/assistant.ask"),
   });
-  await page
-    .getByRole("combobox", { name: "Data workspace", exact: true })
-    .selectOption("demo");
+  await selectDataWorkspace(page, "demo");
   await aborted;
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),

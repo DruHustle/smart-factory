@@ -1,0 +1,39 @@
+name: Consolidation source audit
+
+# Read-only source comparison. No production credentials, deployments or deletion.
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/consolidation-audit.yml
+      - scripts/audit_consolidation.py
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: consolidation-audit-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  source-audit:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Compare immutable component sources and preserve recovery histories
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: python3 scripts/audit_consolidation.py "$RUNNER_TEMP/consolidation-source-review"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: consolidation-source-review
+          path: ${{ runner.temp }}/consolidation-source-review/
+          if-no-files-found: error
+          compression-level: 6
+          retention-days: 7

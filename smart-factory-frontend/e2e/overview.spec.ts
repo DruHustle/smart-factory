@@ -189,6 +189,159 @@ async function capture(page: Page, name: string, metadata: unknown) {
   );
 }
 
+// Each independent journey owns its browser context. Fixture teardown has its
+// own Playwright phase, so closing a context cannot replace the interrupted
+// body in a timeout report. Every journey keeps the same observation guards.
+function wholeFactoryJourney(
+  width: number,
+  theme: "light" | "dark",
+  videoName: string,
+) {
+  return test.extend<{ factoryPage: Page }>({
+    factoryPage: async ({ browser }, use) => {
+      mkdirSync(directory, { recursive: true });
+      const context = await browser.newContext({
+        baseURL: process.env.EXPERIENCE_E2E_BASE_URL ?? "http://127.0.0.1:3123",
+        viewport: { width, height: 960 },
+        hasTouch: width < 768,
+        isMobile: width < 768,
+        colorScheme: theme,
+        // CI retains screenshots and structured evidence but does not upload
+        // videos. Avoid encoding an unused full-resolution video on its CPU
+        // renderer; local review continues to record it as before.
+        ...(process.env.CI
+          ? {}
+          : {
+              recordVideo: {
+                dir: `${directory}/raw-video`,
+                size: { width, height: 960 },
+              },
+            }),
+      });
+      const page = await context.newPage(),
+        video = page.video();
+      const errors: string[] = [],
+        commands: string[] = [];
+      page.on("pageerror", (e) => errors.push(e.message));
+      page.on("request", (r) => {
+        if (
+          r.method() === "POST" &&
+          /controlAda031|pulseIndicator|ota.deploy|simulate|importSnapshot/.test(
+            r.url(),
+          )
+        )
+          commands.push(r.url());
+      });
+      try {
+        await use(page);
+      } finally {
+        try {
+          expect(commands).toEqual([]);
+          expect(errors).toEqual([]);
+        } finally {
+          await context.close();
+          if (video)
+            await video.saveAs(
+              `${directory}/${videoName}-${theme}-${width}.webm`,
+            );
+        }
+      }
+    },
+  });
+}
+
+async function openWholeFactory(
+  page: Page,
+  width: number,
+  theme: "light" | "dark",
+) {
+  await login(page);
+  await Promise.all([
+    page.waitForEvent("load", { timeout: 30000 }),
+    page
+      .getByRole("combobox", { name: "Data workspace", exact: true })
+      .selectOption("demo"),
+  ]);
+  await expect(
+    page.getByRole("combobox", { name: "Data workspace", exact: true }),
+  ).toHaveValue("demo", { timeout: 15000 });
+  await setTheme(page, theme);
+  return typography(page, width);
+}
+
+async function readyWholeFactory(page: Page) {
+  const snapshot = (
+    await (await page.request.get("/api/trpc/factory.floor")).json()
+  ).result.data.json;
+  expect(snapshot.complete).toBe(true);
+  expect(snapshot.items).toHaveLength(52);
+  expect(snapshot.total).toBe(snapshot.items.length);
+  expect(snapshot.links.length).toBeGreaterThan(30);
+  // The authored showcase has six procedural gateway/clock boards.
+  // Every other item must finish its downloaded reference; accepting
+  // just a few models would miss a stalled or truncated staging queue.
+  const proceduralDeviceIds = [
+    "smart-factory-public-simulator",
+    "showcase.gateway:process",
+    "showcase.gateway:assembly",
+    "showcase.gateway:packaging",
+    "showcase.gateway:network",
+    "showcase.floor:grandmaster",
+  ];
+  expect(
+    (snapshot.items as InventoryItem[])
+      .filter(
+        (item) =>
+          item.kind === "device" &&
+          proceduralDeviceIds.includes(item.identifier),
+      )
+      .map((item) => item.identifier)
+      .sort(),
+  ).toEqual([...proceduralDeviceIds].sort());
+  const expectedDetailedModels = 46;
+  const count = String(snapshot.total),
+    floor = page.getByTestId("factory-floor");
+  await expect(floor).toHaveAttribute("data-total-items", count);
+  await expect(floor).toHaveAttribute("data-visible-items", count);
+  await expect(
+    page.getByRole("img", {
+      name: "Interactive 3D factory floor",
+      exact: true,
+    }),
+  ).toHaveAttribute("data-floor-node-count", count);
+  await expect
+    .poll(
+      async () => {
+        const text = await floor.getByRole("status").textContent();
+        return Number(text?.match(/· (\d+) detailed models ready/)?.[1] ?? 0);
+      },
+      { timeout: 30000 },
+    )
+    .toBe(expectedDetailedModels);
+  const renderedNvidia = JSON.parse(
+    (await page
+      .getByRole("img", {
+        name: "Interactive 3D factory floor",
+        exact: true,
+      })
+      .getAttribute("data-floor-nvidia-models")) ?? "[]",
+  ) as string[];
+  expect(renderedNvidia).toContain("nvidia-transfer-conveyor");
+  const canvas = page.getByRole("img", {
+    name: "Interactive 3D factory floor",
+    exact: true,
+  });
+  return {
+    snapshot,
+    count,
+    floor,
+    canvas,
+    expectedDetailedModels,
+    renderedNvidia,
+    proceduralDeviceIds,
+  };
+}
+
 for (const width of [390, 1440])
   for (const theme of ["light", "dark"] as const)
     test.describe(`Overview graphics whole factory ${width}px ${theme}`, () => {
@@ -196,91 +349,27 @@ for (const width of [390, 1440])
         process.env.EXPERIENCE_E2E !== "true",
         "Requires guarded disposable factory",
       );
-      test("renders all floor items and native references with summary graphs and item drill-down", async ({
-        browser,
-      }) => {
-        const context = await browser.newContext({
-          baseURL:
-            process.env.EXPERIENCE_E2E_BASE_URL ?? "http://127.0.0.1:3123",
-          viewport: { width, height: 960 },
-          hasTouch: width < 768,
-          isMobile: width < 768,
-          colorScheme: theme,
-          // CI retains screenshots and structured evidence but does not upload
-          // videos. Avoid encoding an unused full-resolution video on its CPU
-          // renderer; local review continues to record it as before.
-          ...(process.env.CI
-            ? {}
-            : {
-                recordVideo: {
-                  dir: `${directory}/raw-video`,
-                  size: { width, height: 960 },
-                },
-              }),
-        });
-        const page = await context.newPage(),
-          video = page.video();
-        const errors: string[] = [],
-          commands: string[] = [];
-        page.on("pageerror", (e) => errors.push(e.message));
-        page.on("request", (r) => {
-          if (
-            r.method() === "POST" &&
-            /controlAda031|pulseIndicator|ota.deploy|simulate|importSnapshot/.test(
-              r.url(),
-            )
-          )
-            commands.push(r.url());
-        });
-        try {
-          await login(page);
-          await Promise.all([
-            page.waitForEvent("load", { timeout: 30000 }),
-            page
-              .getByRole("combobox", { name: "Data workspace", exact: true })
-              .selectOption("demo"),
-          ]);
-          await expect(
-            page.getByRole("combobox", { name: "Data workspace", exact: true }),
-          ).toHaveValue("demo", { timeout: 15000 });
-          await setTheme(page, theme);
-          const styles = await typography(page, width);
+      const renderTest = wholeFactoryJourney(width, theme, "factory-overview");
+      const exploreTest = wholeFactoryJourney(width, theme, "factory-explore");
+      const itemTest = wholeFactoryJourney(width, theme, "factory-item");
+      const routesTest = wholeFactoryJourney(width, theme, "factory-routes");
+
+      renderTest(
+        "renders all floor items and native references with summary graphs",
+        async ({ factoryPage: page }) => {
+          const styles = await openWholeFactory(page, width, theme);
           const s = (
             await (await page.request.get("/api/trpc/system.showcase")).json()
           ).result.data.json;
-          const snapshot = (
-            await (await page.request.get("/api/trpc/factory.floor")).json()
-          ).result.data.json;
-          expect(snapshot.complete).toBe(true);
-          expect(snapshot.items).toHaveLength(52);
-          expect(snapshot.total).toBe(snapshot.items.length);
-          expect(snapshot.links.length).toBeGreaterThan(30);
-          // The authored showcase has six procedural gateway/clock boards.
-          // Every other item must finish its downloaded reference; accepting
-          // just a few models would miss a stalled or truncated staging queue.
-          const proceduralDeviceIds = [
-            "smart-factory-public-simulator",
-            "showcase.gateway:process",
-            "showcase.gateway:assembly",
-            "showcase.gateway:packaging",
-            "showcase.gateway:network",
-            "showcase.floor:grandmaster",
-          ];
-          expect(
-            (snapshot.items as InventoryItem[])
-              .filter(
-                (item) =>
-                  item.kind === "device" &&
-                  proceduralDeviceIds.includes(item.identifier),
-              )
-              .map((item) => item.identifier)
-              .sort(),
-          ).toEqual([...proceduralDeviceIds].sort());
-          const expectedDetailedModels = 46;
-          const count = String(snapshot.total),
-            floor = page.getByTestId("factory-floor");
-          await expect(floor).toHaveAttribute("data-total-items", count);
-          await expect(floor).toHaveAttribute("data-visible-items", count);
+          const {
+            snapshot,
+            count,
+            floor,
+            canvas,
+            expectedDetailedModels,
+            renderedNvidia,
+            proceduralDeviceIds,
+          } = await readyWholeFactory(page);
           if (width === 1440) {
             const floorBox = await floor.boundingBox();
             const mainBox = await page
@@ -303,36 +392,6 @@ for (const width of [390, 1440])
             );
             expect(Math.abs(statusBox!.y - floorPanelBox!.y)).toBeLessThan(2);
           }
-          await expect(
-            page.getByRole("img", {
-              name: "Interactive 3D factory floor",
-              exact: true,
-            }),
-          ).toHaveAttribute("data-floor-node-count", count);
-          await expect
-            .poll(
-              async () => {
-                const text = await floor.getByRole("status").textContent();
-                return Number(
-                  text?.match(/· (\d+) detailed models ready/)?.[1] ?? 0,
-                );
-              },
-              { timeout: 30000 },
-            )
-            .toBe(expectedDetailedModels);
-          const renderedNvidia = JSON.parse(
-            (await page
-              .getByRole("img", {
-                name: "Interactive 3D factory floor",
-                exact: true,
-              })
-              .getAttribute("data-floor-nvidia-models")) ?? "[]",
-          ) as string[];
-          expect(renderedNvidia).toContain("nvidia-transfer-conveyor");
-          const canvas = page.getByRole("img", {
-            name: "Interactive 3D factory floor",
-            exact: true,
-          });
           const routes = JSON.parse(
             (await canvas.getAttribute("data-connection-routes")) ?? "[]",
           ) as { id: string; routing?: string; from: number[]; to: number[] }[];
@@ -371,6 +430,44 @@ for (const width of [390, 1440])
                 ),
               ).toBe(true);
           }
+          await expect(canvas).toHaveAttribute(
+            "data-floor-floating-labels",
+            "0",
+          );
+          await expect(
+            page.getByRole("heading", {
+              name: "Factory observations",
+              exact: true,
+            }),
+          ).toBeVisible();
+          const timingEvidence = page
+            .locator("summary")
+            .filter({ hasText: "Process and FX / TSN evidence" });
+          await timingEvidence.click();
+          await expect(
+            page.getByRole("heading", { name: "FX / TSN health", exact: true }),
+          ).toBeVisible();
+          await timingEvidence.click();
+          await capture(page, `factory-floor-${theme}-${width}`, {
+            total: snapshot.total,
+            detailedModelsReady: expectedDetailedModels,
+            renderedNvidia,
+            trayLinks: trayLinks.length,
+            trayTrunks,
+            trayBranches,
+            proceduralDeviceIds,
+            complete: snapshot.complete,
+            styles,
+            source: s.anchor,
+          });
+        },
+      );
+
+      exploreTest(
+        "restores the overview camera after eye-level exploration",
+        async ({ factoryPage: page }) => {
+          await openWholeFactory(page, width, theme);
+          const { floor, canvas } = await readyWholeFactory(page);
           await expect(canvas).toHaveAttribute(
             "data-floor-floating-labels",
             "0",
@@ -446,32 +543,14 @@ for (const width of [390, 1440])
                 overviewView[field][axis],
                 3,
               );
-          await expect(
-            page.getByRole("heading", {
-              name: "Factory observations",
-              exact: true,
-            }),
-          ).toBeVisible();
-          const timingEvidence = page
-            .locator("summary")
-            .filter({ hasText: "Process and FX / TSN evidence" });
-          await timingEvidence.click();
-          await expect(
-            page.getByRole("heading", { name: "FX / TSN health", exact: true }),
-          ).toBeVisible();
-          await timingEvidence.click();
-          await capture(page, `factory-floor-${theme}-${width}`, {
-            total: snapshot.total,
-            detailedModelsReady: expectedDetailedModels,
-            renderedNvidia,
-            trayLinks: trayLinks.length,
-            trayTrunks,
-            trayBranches,
-            proceduralDeviceIds,
-            complete: snapshot.complete,
-            styles,
-            source: s.anchor,
-          });
+        },
+      );
+
+      itemTest(
+        "returns from the selected floor item to its complete floor plan",
+        async ({ factoryPage: page }) => {
+          await openWholeFactory(page, width, theme);
+          const { snapshot, count, floor } = await readyWholeFactory(page);
           await page
             .locator("summary")
             .filter({ hasText: /^Find an item/ })
@@ -526,6 +605,13 @@ for (const width of [390, 1440])
             total: snapshot.total,
             selected: item.ref,
           });
+        },
+      );
+
+      routesTest(
+        "opens every related observation route without horizontal overflow",
+        async ({ factoryPage: page }) => {
+          await openWholeFactory(page, width, theme);
           for (const [route, heading] of [
             ["/monitoring", "Monitoring"],
             ["/alerts", "Alerts"],
@@ -542,16 +628,8 @@ for (const width of [390, 1440])
               ),
             ).toBe(true);
           }
-          expect(commands).toEqual([]);
-          expect(errors).toEqual([]);
-        } finally {
-          await context.close();
-          if (video)
-            await video.saveAs(
-              `${directory}/factory-overview-${theme}-${width}.webm`,
-            );
-        }
-      });
+        },
+      );
     });
 
 for (const width of [390, 1440])
