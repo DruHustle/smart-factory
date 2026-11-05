@@ -934,3 +934,21 @@ html:has(.overview-floor) {
     height: 24rem;
   }
 }
+
+/* Insight views replace the spatial renderer and must grow with their content.
+   In fullscreen, scroll the content rather than clipping the charts or lists. */
+.overview-floor:not(.floor-expanded) .overview-floor-viewport[data-view="telemetry"],
+.overview-floor:not(.floor-expanded) .overview-floor-viewport[data-view="inventory"],
+.overview-floor:not(.floor-expanded) .overview-floor-viewport[data-view="infrastructure"] {
+  height: auto;
+  min-height: 18rem;
+  overflow: visible;
+}
+
+.overview-floor.floor-expanded .overview-floor-viewport[data-view="telemetry"],
+.overview-floor.floor-expanded .overview-floor-viewport[data-view="inventory"],
+.overview-floor.floor-expanded .overview-floor-viewport[data-view="infrastructure"] {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
