@@ -357,7 +357,7 @@ export default function Register() {
                   placeholder="Create a secure password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10 bg-background/50 border-white/20 focus:border-primary"
+                  className="h-11 md:h-11 pl-10 pr-12 bg-background/50 border-white/20 focus:border-primary"
                   minLength={12}
                   maxLength={72}
                   required
@@ -368,7 +368,7 @@ export default function Register() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                   aria-pressed={showPassword}
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
                 >
                   {showPassword ? (
                     <EyeOff className="w-4 h-4" />
