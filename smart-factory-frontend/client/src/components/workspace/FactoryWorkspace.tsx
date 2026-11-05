@@ -570,7 +570,7 @@ export function FactoryWorkspace({
               }
             />
           )}
-          <section
+          {mode === "inventory" && <section
             className="rounded-lg border bg-card p-4"
             aria-label="Factory inventory"
           >
@@ -634,7 +634,7 @@ export function FactoryWorkspace({
                 create an inventory item or place an existing one.
               </p>
             )}
-          </section>
+          </section>}
         </>
       )}
     </div>
