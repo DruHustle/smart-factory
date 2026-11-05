@@ -52,10 +52,26 @@ test("signed-out controls and password visibility expose sound semantics", async
   ).toBeVisible();
   await expectSoundDocumentStructure(page);
   const password = page.locator("#password");
-  await page.getByRole("button", { name: "Show password" }).click();
-  await expect(password).toHaveAttribute("type", "text");
-  await page.getByRole("button", { name: "Hide password" }).click();
-  await expect(password).toHaveAttribute("type", "password");
+  for (const width of [320, 390, 1440]) {
+    await page.setViewportSize({ width, height: 844 });
+    const toggle = page.getByRole("button", { name: "Show password" });
+    await toggle.click({ trial: true });
+    const box = await toggle.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    const inputBox = await password.boundingBox();
+    expect(inputBox!.height).toBeGreaterThanOrEqual(44);
+    // A tap outside the centered icon must still activate the control.
+    await toggle.click({ position: { x: box!.width - 4, y: box!.height / 2 } });
+    await expect(password).toHaveAttribute("type", "text");
+    const hide = page.getByRole("button", { name: "Hide password" });
+    await expect(hide).toHaveAttribute("aria-pressed", "true");
+    await hide.focus();
+    await page.keyboard.press("Space");
+    await expect(password).toHaveAttribute("type", "password");
+    await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  }
 });
 
 const routes = [
