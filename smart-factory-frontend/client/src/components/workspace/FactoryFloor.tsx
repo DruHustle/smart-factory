@@ -63,6 +63,8 @@ import {
 import { useFactoryDiagram } from "./useFactoryDiagram";
 import { EngineeringDrawingExport } from "./EngineeringDrawingExport";
 import { FactoryFloorInsights } from "./FactoryFloorInsights";
+import { useWorkspaceLocation } from "@/lib/hashLocation";
+import { resolveFloorView, type FloorView } from "@/lib/floor-insights";
 export function FactoryFloor({
   items,
   links,
@@ -84,6 +86,7 @@ export function FactoryFloor({
   onGrabChange,
   insightsRangeMs,
   onInsightsRangeChange,
+  onInspectItem,
 }: {
   items: InventoryItem[];
   links: FloorLink[];
@@ -105,6 +108,7 @@ export function FactoryFloor({
   onGrabChange?: (active: boolean) => void;
   insightsRangeMs?: number;
   onInsightsRangeChange?: (value: number) => void;
+  onInspectItem?: (ref: string) => void;
 }) {
   const { theme } = useTheme();
   const fullscreen = useFloorFullscreen();
@@ -137,10 +141,15 @@ export function FactoryFloor({
         : readFloorOffsets(safeLocalStorage.getItem(preferenceKey)),
     [saved, preferenceKey],
   );
-  const [view, setView] = useState<"3d" | "plan" | "process" | "electrical" | "telemetry" | "inventory" | "infrastructure">(
-      "3d",
-    ),
-    [zone, setZone] = useState("all"),
+  const [workspaceLocation, navigateWorkspace] = useWorkspaceLocation();
+  const viewParams = new URLSearchParams(workspaceLocation.split("?")[1] ?? "");
+  const view = resolveFloorView(viewParams.get("floorView"));
+  const setView = (nextView: FloorView) => {
+    const next = new URLSearchParams(viewParams);
+    if (nextView === "3d") next.delete("floorView"); else next.set("floorView", nextView);
+    navigateWorkspace(`${workspaceLocation.split("?")[0]}${next.size ? `?${next}` : ""}`);
+  };
+  const [zone, setZone] = useState("all"),
     [reset, setReset] = useState(0),
     [search, setSearch] = useState("");
   const [floorHelpOpen, setFloorHelpOpen] = useState(false);
@@ -359,7 +368,7 @@ export function FactoryFloor({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
-          {headerActions}
+          {!insights && headerActions}
           <select
             aria-label="Factory floor zone"
             value={zone}
@@ -602,6 +611,7 @@ export function FactoryFloor({
             returnTo={returnTo}
             rangeMs={insightsRangeMs}
             onRangeChange={onInsightsRangeChange}
+            onInspectItem={(ref) => { setView("3d"); if (onInspectItem) onInspectItem(ref); else selectOnFloor(ref); }}
           />
         ) : schematic ? (
           <FactorySchematic

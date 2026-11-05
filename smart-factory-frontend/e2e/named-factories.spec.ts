@@ -66,6 +66,7 @@ test.describe("Explore with a selected named-factory item", () => {
     }) => {
       const factoryId = await prepare(page);
       await add(page, "pump", "Acceptance pump", "P-01");
+      await page.getByRole("group", { name: "Floor representation" }).getByRole("button", { name: "Factory Inventory", exact: true }).click();
       await page
         .getByRole("button", {
           name: "Select Acceptance pump on floor",
@@ -149,6 +150,7 @@ test("named factory inventory, hand drop to bin and attributed history stay cons
   expect(f.draft.document.width).toBe(32);
   expect(f.draft.document.placements).toHaveLength(3);
   expect(first.items.some((i: any) => i.ref === ref)).toBe(true);
+  await page.getByRole("group", { name: "Floor representation" }).getByRole("button", { name: "Factory Inventory", exact: true }).click();
   await page
     .getByRole("button", {
       name: "Select Acceptance pump on floor",
