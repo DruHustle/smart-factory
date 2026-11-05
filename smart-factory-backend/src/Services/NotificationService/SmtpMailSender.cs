@@ -10,6 +10,7 @@ public sealed class SmtpMailSender : IEmailSender
     private readonly string username;
     private readonly string password;
     private readonly MailAddress? sender;
+    private readonly string? webOrigin;
     private readonly bool allowAll;
     private readonly HashSet<string> domains;
     private readonly HashSet<string> recipients;
@@ -24,6 +25,7 @@ public sealed class SmtpMailSender : IEmailSender
         username = configuration["SMTP_USERNAME"] ?? "";
         password = configuration["SMTP_PASSWORD"] ?? "";
         sender = MailAddress.TryCreate(configuration["SMTP_FROM"], out var parsed) ? parsed : null;
+        webOrigin = configuration["PASSWORD_RESET_ORIGIN"] ?? configuration["ALLOWED_ORIGIN"];
         allowAll = string.Equals(configuration["SMTP_ALLOW_ALL_RECIPIENTS"], "true", StringComparison.OrdinalIgnoreCase);
         domains = Split(configuration["SMTP_ALLOWED_RECIPIENT_DOMAINS"]);
         recipients = Split(configuration["SMTP_ALLOWED_RECIPIENTS"]);
@@ -40,6 +42,13 @@ public sealed class SmtpMailSender : IEmailSender
     {
         if (!Configured || !Allows(recipient)) throw new InvalidOperationException("SMTP delivery is not configured or the recipient is not allowed.");
         using var message = new MailMessage { From = sender!, Subject = title, Body = body };
+        var html = AlternateView.CreateAlternateViewFromString(
+            EmailTemplate.Render(title, body, notificationId, webOrigin), System.Text.Encoding.UTF8, "text/html");
+        html.LinkedResources.Add(new LinkedResource(new MemoryStream(Convert.FromBase64String(EmailBrand.Base64)), "image/png") {
+            ContentId = EmailBrand.ContentId,
+            TransferEncoding = System.Net.Mime.TransferEncoding.Base64,
+        });
+        message.AlternateViews.Add(html);
         message.To.Add(recipient);
         message.Headers.Add("X-Smart-Factory-Notification-Id", notificationId.ToString());
         using var client = new SmtpClient(host, port) {
