@@ -952,3 +952,8 @@ html:has(.overview-floor) {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+
+/* Expanded telemetry is readable even when the compact overview chart layout is reused. */
+[data-testid="expanded-factory-telemetry"] .overview-trend { display: block; }
+[data-testid="expanded-factory-telemetry"] .overview-trend-plot > [role="img"],
+[data-testid="expanded-factory-telemetry"] .overview-trend-plot > [role="link"] { height: clamp(16rem, 38vh, 28rem); }

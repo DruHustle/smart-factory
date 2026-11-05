@@ -485,6 +485,7 @@ export function FactoryWorkspace({
                 items={items}
                 links={gatewayLinksForFloor(items)}
                 selected={selected}
+                onInspectItem={(ref) => { setSelected(ref); setTab("equipment"); }}
                 onSelect={(ref) => setSelected(ref || null)}
                 returnTo={`/${mode === "inventory" ? "inventory" : ""}?factory=${id}`}
                 demo={c.demo}

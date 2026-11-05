@@ -436,18 +436,18 @@ for (const width of [390, 1440])
           );
           // The three overview panels now share the floor representation selector.
           await expect(page.locator(".overview-bottom-grid")).toHaveCount(0);
-          await page.getByRole("button", { name: "Telemetry", exact: true }).click();
+          await page.getByRole("group", { name: "Floor representation" }).getByRole("button", { name: "Telemetry", exact: true }).click();
           await expect(page.getByLabel("Equipment telemetry previews")).toBeVisible();
           await expect(page.getByTestId("telemetry-preview").first()).toBeVisible();
           await page.getByTestId("telemetry-preview").first().click();
           await expect(page.getByTestId("expanded-factory-telemetry")).toBeVisible();
-          await page.getByRole("button", { name: "Factory Inventory", exact: true }).click();
+          await page.getByRole("group", { name: "Floor representation" }).getByRole("button", { name: "Factory Inventory", exact: true }).click();
           await expect(page.getByLabel("Factory inventory summary")).toBeVisible();
           await expect(page.getByRole("group", { name: "System item types" })).toBeVisible();
-          await page.getByRole("button", { name: "Infrastructure", exact: true }).click();
+          await page.getByRole("group", { name: "Floor representation" }).getByRole("button", { name: "Infrastructure", exact: true }).click();
           await expect(page.getByLabel("Factory infrastructure and cybersecurity")).toBeVisible();
           await expect(page.getByLabel("Cybersecurity status")).toBeVisible();
-          await page.getByRole("button", { name: "3D floor", exact: true }).click();
+          await page.getByRole("group", { name: "Floor representation" }).getByRole("button", { name: "3D floor", exact: true }).click();
           await expect(canvas).toBeVisible();
           const timingEvidence = page
             .locator("summary")

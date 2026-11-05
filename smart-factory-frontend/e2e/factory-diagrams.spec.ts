@@ -1093,16 +1093,16 @@ for (const width of [390, 1440]) {
     await expect(page.getByTestId("telemetry-preview")).toHaveCount(items.length);
     await page.getByRole("button", { name: "Expand telemetry for Review pump" }).click();
     await expect(page.getByTestId("expanded-factory-telemetry")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Review pump · expanded telemetry" })).toBeVisible();
+    await expect(page.getByRole("region", { name: "Factory observations" })).toBeVisible();
     await page.getByRole("button", { name: "Expand telemetry for Review tank" }).click();
-    await expect(page.getByRole("heading", { name: "Review tank · expanded telemetry" })).toBeVisible();
+    await expect(page.getByLabel("Expanded telemetry for Review tank", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Close expanded chart" }).click();
     await expect(page.getByTestId("expanded-factory-telemetry")).toHaveCount(0);
 
     await choices.getByRole("button", { name: "Factory Inventory" }).click();
     await expect(floor).toHaveAttribute("data-view", "inventory");
     await expect(page.getByRole("group", { name: "System item types" })).toBeVisible();
-    await expect(page.getByLabel("Inventory by location")).toContainText("Assembly");
+    await expect(page.getByLabel("Inventory by location")).toContainText("Unassigned");
     await expect(page.getByText("actual downtime duration requires verified operational history", { exact: false })).toBeVisible();
 
     await choices.getByRole("button", { name: "Infrastructure" }).click();
