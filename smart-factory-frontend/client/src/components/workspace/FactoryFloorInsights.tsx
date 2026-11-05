@@ -20,14 +20,18 @@ export function FactoryFloorInsights({
   items,
   demo,
   returnTo,
+  rangeMs,
+  onRangeChange,
 }: {
   view: FloorInsightsView;
   items: InventoryItem[];
   demo: boolean;
   returnTo: string;
+  rangeMs?: number;
+  onRangeChange?: (value: number) => void;
 }) {
   if (view === "telemetry")
-    return <FactoryTelemetry items={items} demo={demo} />;
+    return <FactoryTelemetry items={items} demo={demo} rangeMs={rangeMs} onRangeChange={onRangeChange} />;
   if (view === "inventory")
     return <FactoryInventory items={items} returnTo={returnTo} />;
   return <FactoryInfrastructure />;
@@ -114,9 +118,10 @@ function TelemetryPreview({
   );
 }
 
-function FactoryTelemetry({ items, demo }: { items: InventoryItem[]; demo: boolean }) {
+function FactoryTelemetry({ items, demo, rangeMs, onRangeChange }: { items: InventoryItem[]; demo: boolean; rangeMs?: number; onRangeChange?: (value: number) => void }) {
   const [metric, setMetric] = useState<Metric>("temperature");
-  const [rangeMs, setRangeMs] = useState(3_600_000);
+  const [localRangeMs, setLocalRangeMs] = useState(3_600_000);
+  const selectedRangeMs = rangeMs ?? localRangeMs;
   const [liveEnd, setLiveEnd] = useState(() => Date.now());
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(6);
@@ -128,7 +133,7 @@ function FactoryTelemetry({ items, demo }: { items: InventoryItem[]; demo: boole
   });
   const recorded = showcase.data?.anchor ? Date.parse(showcase.data.anchor) : NaN;
   const endTime = demo && Number.isFinite(recorded) ? recorded : liveEnd;
-  const intervalMs = rangeMs === 86_400_000 ? 900_000 : 60_000;
+  const intervalMs = selectedRangeMs === 86_400_000 ? 900_000 : 60_000;
   const sources = useMemo(() => overviewObservationSources(items), [items]);
   const filtered = sources.filter((item) =>
     `${item.name} ${item.identifier} ${item.zone ?? ""} ${item.itemType}`
@@ -172,8 +177,12 @@ function FactoryTelemetry({ items, demo }: { items: InventoryItem[]; demo: boole
         </select>
         <select
           aria-label="Factory telemetry period"
-          value={rangeMs}
-          onChange={(event) => setRangeMs(Number(event.target.value))}
+          value={selectedRangeMs}
+          onChange={(event) => {
+            const next = Number(event.target.value);
+            if (onRangeChange) onRangeChange(next);
+            else setLocalRangeMs(next);
+          }}
           className="workspace-control min-w-0"
         >
           <option value={3_600_000}>Last 60 min</option>
@@ -195,7 +204,7 @@ function FactoryTelemetry({ items, demo }: { items: InventoryItem[]; demo: boole
                 item={item}
                 metric={metric}
                 demo={demo}
-                startTime={endTime - rangeMs}
+                startTime={endTime - selectedRangeMs}
                 endTime={endTime}
                 intervalMs={intervalMs}
                 expanded={expandedRef === item.ref}
@@ -225,7 +234,7 @@ function FactoryTelemetry({ items, demo }: { items: InventoryItem[]; demo: boole
             metric={metric}
             onMetricChange={setMetric}
             scope={demo ? "simulated" : "operational"}
-            startTime={endTime - rangeMs}
+            startTime={endTime - selectedRangeMs}
             endTime={endTime}
             intervalMs={intervalMs}
             openHref="/analytics"
