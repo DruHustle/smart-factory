@@ -8,6 +8,7 @@ public sealed class SesMailSender : IEmailSender
 {
     private readonly IAmazonSimpleEmailServiceV2 client;
     private readonly string sender;
+    private readonly string? webOrigin;
     private readonly HashSet<string> domains;
     private readonly HashSet<string> recipients;
     private readonly bool allowAll;
@@ -19,6 +20,7 @@ public sealed class SesMailSender : IEmailSender
     {
         this.client = client;
         sender = configuration["SES_FROM"] ?? "";
+        webOrigin = configuration["PASSWORD_RESET_ORIGIN"] ?? configuration["ALLOWED_ORIGIN"];
         Configured = string.Equals(configuration["SES_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
         allowAll = string.Equals(configuration["SES_ALLOW_ALL_RECIPIENTS"], "true", StringComparison.OrdinalIgnoreCase);
         domains = Split(configuration["SES_ALLOWED_RECIPIENT_DOMAINS"]);
@@ -42,12 +44,21 @@ public sealed class SesMailSender : IEmailSender
     {
         if (!Configured || !Allows(recipient))
             throw new InvalidOperationException("SES delivery is not configured or the recipient is not allowed.");
+        using var brand = new MemoryStream(Convert.FromBase64String(EmailBrand.Base64));
         await client.SendEmailAsync(new SendEmailRequest {
             FromEmailAddress = sender,
             Destination = new Destination { ToAddresses = [recipient] },
             Content = new EmailContent { Simple = new Message {
                 Subject = new Content { Data = title, Charset = "UTF-8" },
-                Body = new Body { Text = new Content { Data = body, Charset = "UTF-8" } },
+                Attachments = [new Amazon.SimpleEmailV2.Model.Attachment {
+                    FileName = EmailBrand.FileName, ContentId = EmailBrand.ContentId,
+                    ContentType = "image/png", ContentDisposition = AttachmentContentDisposition.INLINE,
+                    ContentTransferEncoding = AttachmentContentTransferEncoding.BASE64, RawContent = brand,
+                }],
+                Body = new Body {
+                    Text = new Content { Data = body, Charset = "UTF-8" },
+                    Html = new Content { Data = EmailTemplate.Render(title, body, notificationId, webOrigin), Charset = "UTF-8" },
+                },
                 Headers = [new MessageHeader { Name = "X-Smart-Factory-Notification-Id", Value = notificationId.ToString() }],
             } },
         }, ct);

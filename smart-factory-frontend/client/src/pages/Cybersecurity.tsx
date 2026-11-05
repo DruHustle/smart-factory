@@ -129,7 +129,9 @@ function Workspace({
   const [filter, setFilter] = useState<Filter>(() => {
     try {
       const p = {
-        ...JSON.parse(safeLocalStorage.getItem(preferenceKey) ?? "{}"),
+        ...(params.has("targetKind")
+          ? {}
+          : JSON.parse(safeLocalStorage.getItem(preferenceKey) ?? "{}")),
         ...Object.fromEntries(params.entries()),
       };
       return {
@@ -350,6 +352,32 @@ function Workspace({
           </Button>
         }
       />
+      {filter.targetKind && (
+        <div
+          aria-label="Selected security scope"
+          className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 text-sm"
+        >
+          <div>
+            <p className="font-medium">
+              Viewing {filter.targetKind}
+              {filter.targetId ? ` #${filter.targetId}` : ""}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Findings, observations and registered posture stay scoped to this
+              identity. Source administration covers the workspace.
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              setFilters({ targetKind: undefined, targetId: undefined })
+            }
+          >
+            Clear asset scope
+          </Button>
+        </div>
+      )}
       {access.canEngineer && (
         <details className="rounded border p-3">
           <summary className="cursor-pointer text-sm">
@@ -491,7 +519,9 @@ function Workspace({
                 </Card>
                 <Card>
                   <CardHeader>
-                    <CardTitle>Source coverage · live receipts</CardTitle>
+                    <CardTitle>
+                      Workspace source coverage · live receipts
+                    </CardTitle>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <p>
@@ -693,7 +723,10 @@ function Workspace({
                 </div>
               ))}
               {posture.data && !posture.data.items.length && (
-                <p>No registered assets or gateways are available.</p>
+                <p>
+                  No registered identity matches this scope. Review the selected
+                  asset or device and its registration.
+                </p>
               )}
             </CardContent>
           </Card>
@@ -790,16 +823,6 @@ function Workspace({
                     </select>
                   </label>
                 </>
-              )}
-              {filter.targetKind && (
-                <Button
-                  variant="outline"
-                  onClick={() =>
-                    setFilters({ targetKind: undefined, targetId: undefined })
-                  }
-                >
-                  Clear asset scope
-                </Button>
               )}
             </div>
             <div
@@ -943,12 +966,48 @@ function Workspace({
                         </button>
                       ))}
                       {findings.data && !findings.data.items.length && (
-                        <p>
-                          No{" "}
-                          {tab === "Incidents" ? "investigations" : "findings"}{" "}
-                          match these filters. This is not a claim that assets
-                          are secure.
-                        </p>
+                        <div className="space-y-3 rounded-lg border border-dashed bg-muted/20 p-5">
+                          <h3 className="font-medium">
+                            No{" "}
+                            {tab === "Incidents"
+                              ? "investigations"
+                              : "findings"}{" "}
+                            in this view
+                          </h3>
+                          <p className="max-w-xl text-sm text-muted-foreground">
+                            No findings match these filters. This is not a claim
+                            that assets are secure. Check that this identity has
+                            recent security evidence and that the selected
+                            filters include the records you expect.
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => changeTab("Asset posture")}
+                            >
+                              Review evidence coverage
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => changeTab("Events")}
+                            >
+                              View security observations
+                            </Button>
+                            {access.canEngineer && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() =>
+                                  changeTab("Sources and policies")
+                                }
+                              >
+                                Review sources & mappings
+                              </Button>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </CardContent>
                   </Card>

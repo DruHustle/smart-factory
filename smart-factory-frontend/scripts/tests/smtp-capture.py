@@ -30,7 +30,8 @@ import threading
 SENDER = "mail-capture@example.test"
 RECIPIENT = "viewer@example.com"
 PASSWORD = "isolated-mail-capture-password"
-MAX_MESSAGE_BYTES = 16 * 1024
+# Includes the HTML alternative and embedded logo; storage stays bounded.
+MAX_MESSAGE_BYTES = 128 * 1024
 MAX_MESSAGES = 8
 MAX_LINE_BYTES = 2048
 MAX_CONNECTIONS = 8
@@ -86,12 +87,13 @@ class MessageStore:
         if len(raw) > MAX_MESSAGE_BYTES:
             raise ValueError("Message too large")
         message = BytesParser(policy=email.policy.default).parsebytes(raw)
-        if message.is_multipart() or message.get_content_type() != "text/plain":
-            raise ValueError("Only a plain text fixture message is supported")
-        body = message.get_payload(decode=True) or b""
+        plain = message.get_body(preferencelist=("plain",))
+        if plain is None or plain.get_content_type() != "text/plain":
+            raise ValueError("A plain text fixture body is required")
+        body = plain.get_payload(decode=True) or b""
         if len(body) > MAX_MESSAGE_BYTES:
             raise ValueError("Decoded message too large")
-        text = body.decode(message.get_content_charset() or "ascii", errors="strict")
+        text = body.decode(plain.get_content_charset() or "ascii", errors="strict")
         with self._lock:
             self._messages.append({
                 "id": self._next_id, "from": sender, "to": list(recipients),
