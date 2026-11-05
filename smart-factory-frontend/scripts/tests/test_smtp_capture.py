@@ -97,6 +97,24 @@ class SmtpCaptureTests(unittest.TestCase):
         self.assertEqual(messages[0]["subject"], "Reset your Smart Factory password")
         self.assertEqual(messages[0]["text"].replace("\r\n", "\n"), body)
 
+    def test_multipart_email_with_inline_logo_preserves_plain_text_recovery(self):
+        body = "Reset Andr\u00e9's password:\nhttp://127.0.0.1:3110/#/reset-password?token=synthetic-test-token\n"
+        message = fixture_message(body)
+        message.add_alternative('<p>Reset your password</p><img src="cid:onesa-company-logo">', subtype="html")
+        message.get_payload()[-1].add_related(
+            b"synthetic-image" * 2048, maintype="image", subtype="png",
+            cid="<onesa-company-logo>", disposition="inline",
+        )
+        self.assertGreater(len(message.as_bytes()), 16 * 1024)
+        self.assertLess(len(message.as_bytes()), capture.MAX_MESSAGE_BYTES)
+        self.smtp_client().send_message(message)
+        with self.request("/messages") as response:
+            messages = json.load(response)
+        self.assertEqual(len(messages), 1)
+        self.assertEqual(messages[0]["text"].replace("\r\n", "\n"), body)
+        self.assertEqual(messages[0]["subject"], "Reset your Smart Factory password")
+        self.assertNotIn("synthetic-image", json.dumps(messages))
+
     def test_auth_login_as_used_by_dotnet_is_supported(self):
         client = self.smtp_client(authenticated=False)
         self.assertEqual(client.docmd("AUTH", "LOGIN")[0], 334)
@@ -178,7 +196,8 @@ class SmtpCaptureTests(unittest.TestCase):
         client = self.smtp_client()
         self.assertEqual(client.mail(capture.SENDER)[0], 250)
         self.assertEqual(client.rcpt(capture.RECIPIENT)[0], 250)
-        code, _ = client.data("Content-Type: text/plain\r\n\r\n" + ("x" * 998 + "\r\n") * 18)
+        lines = capture.MAX_MESSAGE_BYTES // 1000 + 1
+        code, _ = client.data("Content-Type: text/plain\r\n\r\n" + ("x" * 998 + "\r\n") * lines)
         self.assertEqual(code, 552)
         self.assertEqual(self.store.messages(), [])
 
@@ -223,6 +242,15 @@ class SmtpCaptureTests(unittest.TestCase):
 
 
 class MessageStoreTests(unittest.TestCase):
+    def test_plain_text_attachment_is_not_a_recovery_body(self):
+        message = EmailMessage()
+        message.set_content("<p>HTML only</p>", subtype="html")
+        message.add_attachment("Private attachment", filename="details.txt")
+        store = capture.MessageStore()
+        with self.assertRaises(ValueError):
+            store.add(capture.SENDER, [capture.RECIPIENT], message.as_bytes())
+        self.assertEqual(store.messages(), [])
+
     def test_only_latest_bounded_messages_are_retained(self):
         store = capture.MessageStore()
         for index in range(capture.MAX_MESSAGES + 2):
