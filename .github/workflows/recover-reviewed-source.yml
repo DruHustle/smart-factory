@@ -1,0 +1,28 @@
+name: Recover reviewed Smart Factory source
+on:
+  push:
+    branches: [chore/recover-reviewed-source-20261106]
+    paths: [.github/workflows/recover-reviewed-source.yml]
+permissions:
+  contents: read
+concurrency:
+  group: smart-factory-reviewed-source-recovery
+  cancel-in-progress: false
+jobs:
+  recover:
+    if: github.repository == 'DruHustle/smart-factory' && github.ref == 'refs/heads/chore/recover-reviewed-source-20261106'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    permissions:
+      contents: write
+    steps:
+      - name: Read the authorized recovery branch without persistent credentials
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify exact patch and prepare only allowlisted source files
+        run: python3 local-tools/review-recovery/publish_reviewed_source.py prepare
+      - name: Publish to the unchanged draft feature branch without force
+        run: python3 local-tools/review-recovery/publish_reviewed_source.py publish
+        env:
+          GH_TOKEN: ${{ github.token }}
