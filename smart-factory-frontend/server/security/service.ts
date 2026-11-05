@@ -272,7 +272,7 @@ export async function posture(
   const db = await database();
   const inventory = await rows<InventoryRecord>(
     db,
-    sql`select 'asset' as kind,id,"assetId" as external_id,name,zone,null::text as firmware_version from assets where (${demo}=false or "isDemo"=true) union all select 'device',id,"deviceId",name,zone,"firmwareVersion" from devices where (${demo}=false or "isDemo"=true) order by kind,id limit 1000`,
+    sql`select * from (select 'asset' as kind,id,"assetId" as external_id,name,zone,null::text as firmware_version from assets where (${demo}=false or "isDemo"=true) union all select 'device',id,"deviceId",name,zone,"firmwareVersion" from devices where (${demo}=false or "isDemo"=true)) inventory where (${f.targetKind ?? null}::text is null or kind=${f.targetKind ?? null}) and (${f.targetId ?? null}::int is null or id=${f.targetId ?? null}) order by kind,id limit 1000`,
   );
   const connections = await rows(
     db,
@@ -282,7 +282,18 @@ export async function posture(
     db,
     sql`select * from security_posture limit 1000`,
   );
-  const observations = await rows(
+  const observations = await rows<
+    Pick<
+      EventRecord,
+      | "target"
+      | "event_type"
+      | "mode"
+      | "quality"
+      | "occurred_at"
+      | "ingested_at"
+      | "clock_skew"
+    > & { fact: Record<string, unknown> }
+  >(
     db,
     sql`select distinct on(e.target::text,e.event_type) e.target,e.event_type,e.mode,e.quality,e.occurred_at,e.ingested_at,e.envelope->'attributes' as fact,e.clock_skew from security_events e join security_sources s on s.id=e.source_id where ${conditions(f, demo, "events")} and e.target is not null order by e.target::text,e.event_type,e.occurred_at desc limit 5000`,
   );
@@ -336,7 +347,7 @@ export async function posture(
           ? "declared registry value"
           : "unknown",
         observations: observations
-          .filter((o) => targetKey(o.target) === targetKey(t))
+          .filter((o) => o.target && targetKey(o.target) === targetKey(t))
           .map((o) => (redacted ? { ...o, fact: { redacted: true } } : o)),
         findings: affected.items.filter(
           (f) => f.target && targetKey(f.target) === targetKey(t),
