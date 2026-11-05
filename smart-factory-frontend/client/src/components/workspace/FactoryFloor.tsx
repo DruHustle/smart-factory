@@ -82,6 +82,8 @@ export function FactoryFloor({
   itemDimensions,
   measured = false,
   onGrabChange,
+  insightsRangeMs,
+  onInsightsRangeChange,
 }: {
   items: InventoryItem[];
   links: FloorLink[];
@@ -101,6 +103,8 @@ export function FactoryFloor({
   itemDimensions?: Record<string, PhysicalDimensions>;
   measured?: boolean;
   onGrabChange?: (active: boolean) => void;
+  insightsRangeMs?: number;
+  onInsightsRangeChange?: (value: number) => void;
 }) {
   const { theme } = useTheme();
   const fullscreen = useFloorFullscreen();
@@ -591,7 +595,14 @@ export function FactoryFloor({
         data-view={view}
       >
         {insights ? (
-          <FactoryFloorInsights view={view} items={visible} demo={demo} returnTo={returnTo} />
+          <FactoryFloorInsights
+            view={view}
+            items={visible}
+            demo={demo}
+            returnTo={returnTo}
+            rangeMs={insightsRangeMs}
+            onRangeChange={onInsightsRangeChange}
+          />
         ) : schematic ? (
           <FactorySchematic
             key={`${drawingScope}:${view}`}
