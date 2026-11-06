@@ -20,7 +20,10 @@ import { Switch } from "@/components/ui/switch";
 import { itemHref } from "@shared/inventory";
 import { toast } from "sonner";
 const UserAccess = lazy(() => import("./UserAccess")),
-  OnesaIntegration = lazy(() => import("./OnesaIntegration"));
+  OnesaIntegration = lazy(() => import("./OnesaIntegration")),
+  NodeRedPackages = lazy(
+    () => import("@/components/workspace/NodeRedPackages"),
+  );
 export default function Administration() {
   const { user } = useAuth(),
     { section = "integrations" } = useParams<{ section?: string }>(),
@@ -78,6 +81,7 @@ export default function Administration() {
 }
 function Integrations() {
   const summary = trpc.system.connections.useQuery();
+  const { user } = useAuth();
   return (
     <div className="space-y-4">
       <Card>
@@ -194,6 +198,7 @@ function Integrations() {
           )}
         </CardContent>
       </Card>
+      {user?.access?.canAdminister && <NodeRedPackages />}
       <OperatingStatus />
       <details className="rounded-lg border bg-card p-4" open>
         <summary className="cursor-pointer font-medium">
