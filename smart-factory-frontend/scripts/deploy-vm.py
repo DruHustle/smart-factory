@@ -41,6 +41,7 @@ RELEASE_MANIFEST = None
 M = None
 DEFAULT_SSH_TARGET = "ubuntu@152.70.22.84"
 HOST = DEFAULT_SSH_TARGET
+SSH_IDENTITY = None
 DEPLOY = Path("/opt/smart-factory-backend")
 DEFAULT_API_ORIGIN = "https://api.152-70-22-84.sslip.io"
 DEFAULT_UI_ORIGIN = "https://smart-factory-iot-app.vercel.app"
@@ -104,6 +105,23 @@ def configure_ssh_target(value=DEFAULT_SSH_TARGET):
         r"(?:[A-Za-z_][A-Za-z0-9_.-]{0,63}@)?[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,251}[A-Za-z0-9])?", value),
         "SSH target must be one user@host or an explicit SSH alias, without a URL, port, whitespace or options.")
     HOST = value
+
+
+def configure_ssh_identity(value=None):
+    """Select an optional local identity without opening or transmitting key bytes."""
+    global SSH_IDENTITY
+    SSH_IDENTITY = None
+    if value is None:
+        return
+    require(isinstance(value, str) and value and not any(character in value for character in "\0\r\n"),
+            "SSH identity must name one existing local identity file.")
+    try:
+        key = Path(value).expanduser().resolve(strict=True)
+        valid = key.is_file()
+    except (OSError, RuntimeError):
+        valid = False
+    require(valid, "The selected SSH identity must be an existing regular file.")
+    SSH_IDENTITY = key
 
 
 def deployment_origins():
@@ -1442,12 +1460,16 @@ def remote_run(directory):
 
 
 def ssh_options():
-    key = Path.home() / ".ssh/id_ed25519"
-    require(key.is_file(), "The existing ~/.ssh/id_ed25519 key is required.")
     require(shutil.which("ssh") is not None and shutil.which("scp") is not None, "OpenSSH ssh and scp are required.")
-    return ["-o", "StrictHostKeyChecking=yes", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
-            "-o", "PreferredAuthentications=publickey", "-o", "PasswordAuthentication=no",
-            "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3", "-i", str(key)]
+    options = ["-o", "StrictHostKeyChecking=yes", "-o", "BatchMode=yes", "-o", "IdentitiesOnly=yes",
+               "-o", "PreferredAuthentications=publickey", "-o", "PasswordAuthentication=no",
+               "-o", "ConnectTimeout=15", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"]
+    # With no override, OpenSSH uses the alias's IdentityFile settings or its
+    # normal defaults. Do not require or inject an unrelated Ed25519 identity.
+    if SSH_IDENTITY is not None:
+        require(SSH_IDENTITY.is_file(), "The selected SSH identity is no longer available.")
+        options += ["-i", str(SSH_IDENTITY)]
+    return options
 
 
 def remote_call(mode, directory=None, helper_sha=None):
@@ -1557,6 +1579,7 @@ def main(argv=None):
     parser.add_argument("--state", help="Private local receipt path for reconnecting to the same release.")
     parser.add_argument("--ssh-target", default=os.environ.get("SMART_FACTORY_SSH_TARGET", DEFAULT_SSH_TARGET),
                         help="Explicit user@host or owner-configured SSH alias; preserved in the deployment receipt.")
+    parser.add_argument("--ssh-identity", help="Optional local identity file for SSH and SCP; otherwise use SMART_FACTORY_SSH_IDENTITY or OpenSSH configuration.")
     parser.add_argument("--api-origin", default=os.environ.get("SMART_FACTORY_API_ORIGIN", DEFAULT_API_ORIGIN),
                         help="Canonical public HTTPS API origin; preserved in the deployment receipt.")
     parser.add_argument("--ui-origin", default=os.environ.get("SMART_FACTORY_UI_ORIGIN", DEFAULT_UI_ORIGIN),
@@ -1569,6 +1592,12 @@ def main(argv=None):
         require(sys.version_info >= (3, 9), "Python 3.9 or newer is required.")
         configure_ssh_target(args.ssh_target)
         configure_origins(args.api_origin, args.ui_origin)
+        if args.remote_mode:
+            require(args.ssh_identity is None, "SSH identity selection belongs to the local client only.")
+            configure_ssh_identity()
+        else:
+            configure_ssh_identity(args.ssh_identity if args.ssh_identity is not None
+                                   else os.environ.get("SMART_FACTORY_SSH_IDENTITY"))
         if args.manifest:
             path = Path(args.manifest).expanduser()
             require(path.is_file() and not path.is_symlink() and path.stat().st_size < 1024 * 1024,
