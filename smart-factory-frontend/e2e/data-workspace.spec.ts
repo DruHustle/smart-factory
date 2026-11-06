@@ -773,6 +773,14 @@ async function workspaceFixture(
   return requests;
 }
 
+async function openFloorInsights(page: Page, name: "Telemetry" | "Factory Inventory" | "Infrastructure" | "Floor plan" | "3D floor") {
+  await page.getByRole("group", { name: "Floor representation" }).getByRole("button", { name, exact: true }).click();
+}
+async function openTelemetry(page: Page) {
+  await openFloorInsights(page, "Telemetry");
+  await page.getByRole("button", { name: "Expand selected source", exact: true }).click();
+}
+
 test("Overview selects direct device observations and keeps the assistant on the same source", async ({
   page,
 }) => {
@@ -781,6 +789,7 @@ test("Overview selects direct device observations and keeps the assistant on the
     directDeviceObservation: true,
   });
   await page.goto("/#/");
+  await openTelemetry(page);
   const source = page.getByLabel("Overview observation source", {
     exact: true,
   });
@@ -793,12 +802,12 @@ test("Overview selects direct device observations and keeps the assistant on the
   await expect
     .poll(
       () =>
-        requests.filter((r) => r.procedure === "readings.trend").at(-1)?.input
+        requests.filter((r) => r.procedure === "readings.trend" && r.input.deviceId === 13).at(-1)?.input
           .deviceId,
     )
     .toBe(13);
   const input = requests
-    .filter((r) => r.procedure === "readings.trend")
+    .filter((r) => r.procedure === "readings.trend" && r.input.deviceId === 13)
     .at(-1)!.input;
   // SuperJSON's wire placeholder for an absent optional field can be null.
   expect(input.assetIds ?? null).toBeNull();
@@ -811,12 +820,12 @@ test("Overview selects direct device observations and keeps the assistant on the
   await expect
     .poll(
       () =>
-        requests.filter((r) => r.procedure === "readings.trend").at(-1)?.input
+        requests.filter((r) => r.procedure === "readings.trend" && r.input.assetIds?.length === 1 && r.input.assetIds[0] === "live-source-1").at(-1)?.input
           .assetIds,
     )
     .toEqual(["live-source-1"]);
   expect(
-    requests.filter((r) => r.procedure === "readings.trend").at(-1)?.input
+    requests.filter((r) => r.procedure === "readings.trend" && r.input.assetIds?.[0] === "live-source-1").at(-1)?.input
       .deviceId ?? null,
   ).toBeNull();
   await expect(
@@ -836,6 +845,7 @@ test("Overview advances live observation windows but preserves an explicitly pin
     directDeviceObservation: true,
   });
   await page.goto("/#/");
+  await openTelemetry(page);
   await expect(page.getByLabel("Overview observation source")).toHaveValue(
     "auto",
   );
@@ -854,6 +864,7 @@ test("Overview advances live observation windows but preserves an explicitly pin
     )
     .toBeGreaterThan(before);
   await page.goto(`/#/?at=${now.getTime()}`);
+  await openTelemetry(page);
   await expect(page.getByLabel("Overview observation source")).toHaveValue(
     "auto",
   );
@@ -894,6 +905,7 @@ test("engineers can change the shared factory timezone without commissioning shi
   await expect(dialog).toBeHidden();
   await expect(page.getByRole("button", { name: "Change factory timezone, current Europe/Berlin" })).toBeVisible();
   await expect(panel).toContainText("Production boundary and shifts are not configured.");
+  await openTelemetry(page);
   const chart = page.getByRole("region", { name: "Factory observations" });
   await expect(chart.locator(".overview-trend-plot")).toContainText("Europe/Berlin");
   await chart.getByText("Accessible bucket table").click();
@@ -1105,6 +1117,8 @@ for (const width of [390, 1440]) {
     });
     await expect(list.getByRole("listitem")).toHaveCount(57);
     await expect(list).toContainText("Live system 57");
+    await openTelemetry(page);
+    await openFloorInsights(page, "3D floor");
     let navigations = 0;
     page.on("request", (request) => {
       if (request.isNavigationRequest() && request.frame() === page.mainFrame())
@@ -1122,6 +1136,8 @@ for (const width of [390, 1440]) {
     expect(new URL(page.url()).search).toBe("");
     expect(new URL(page.url()).hash).toBe("#/");
     expect(navigations).toBe(1);
+    await openTelemetry(page);
+    await openFloorInsights(page, "3D floor");
     await page.reload();
     await expect(selector).toHaveValue("demo");
     await expect(floor).toHaveAttribute("data-total-items", "57");
@@ -1150,15 +1166,12 @@ for (const width of [390, 1440]) {
       (r) => r.procedure === "readings.trend",
     )) {
       const prefix = request.input.scope === "simulated" ? "demo" : "live";
-      // This fixture has five assets and one static, unobserved 3D model.
-      expect(request.input.assetIds).toEqual([
-        `${prefix}-source-1`,
-        `${prefix}-source-2`,
-        `${prefix}-source-3`,
-        `${prefix}-source-4`,
-        `${prefix}-source-5`,
-      ]);
-      expect(request.input.deviceId ?? null).toBeNull();
+      // Every thumbnail/detail is source-scoped; static models are not observations.
+      if (request.input.deviceId != null) expect(Number(request.input.deviceId)).toBeGreaterThan(0);
+      else {
+        expect(request.input.assetIds.length).toBeGreaterThan(0);
+        for (const id of request.input.assetIds) expect(id).toMatch(new RegExp(`^${prefix}-source-[1-5]$`));
+      }
     }
     expect(
       requests.filter((r) => /equipment\.(get|workspace)/.test(r.procedure)),
@@ -1294,12 +1307,15 @@ test("Overview graphics renders all 57 items in 3D, preserves whole-factory scop
     .getByRole("button", { name: "Fit whole factory floor", exact: true })
     .click();
   await expect(floor).toHaveAttribute("data-visible-items", "57");
+  await openFloorInsights(page, "Factory Inventory");
   await expect(
     page.getByRole("group", { name: "System item types", exact: true }),
   ).toContainText("57");
+  await openTelemetry(page);
   await expect(
     page.getByRole("heading", { name: "Factory observations", exact: true }),
   ).toBeVisible();
+  await openFloorInsights(page, "Floor plan");
   expect(
     requests.filter((r) => /devices\.getConnected/.test(r.procedure)),
   ).toEqual([]);
@@ -1424,9 +1440,11 @@ test("Overview graphics retains the complete floor plan when WebGL is unavailabl
       .getByRole("img", { name: "Accessible factory floor plan", exact: true })
       .getByRole("button"),
   ).toHaveCount(57);
+  await openTelemetry(page);
   await expect(
     page.getByRole("heading", { name: "Factory observations", exact: true }),
   ).toBeVisible();
+  await openFloorInsights(page, "Floor plan");
 });
 
 for (const width of [390, 1440])
@@ -1489,12 +1507,14 @@ for (const width of [390, 1440])
       await expect(
         page.getByRole("link", { name: "Open item", exact: true }),
       ).toHaveAttribute("href", /#\/inventory\/device%3A57\/overview/);
+      await openTelemetry(page);
       await expect(
         page.getByRole("heading", {
           name: "Factory observations",
           exact: true,
         }),
       ).toBeVisible();
+      await openFloorInsights(page, "Floor plan");
       await page
         .getByLabel("Factory floor zone", { exact: true })
         .selectOption("Packaging");
@@ -1547,6 +1567,7 @@ test("Overview gives the floor full width when no attention is needed and restri
   await expect(
     page.locator(".overview-kpis").getByRole("link", { name: /Needs review/ }),
   ).toBeVisible();
+  await openFloorInsights(page, "Infrastructure");
   await expect(
     page.getByText("Service evidence is available to administrators.", {
       exact: false,
@@ -1555,6 +1576,7 @@ test("Overview gives the floor full width when no attention is needed and restri
   expect(
     requests.filter((r) => r.procedure === "system.infrastructure"),
   ).toHaveLength(0);
+  await openTelemetry(page);
   await page
     .getByLabel("Overview time range", { exact: true })
     .selectOption("24h");
@@ -1599,6 +1621,7 @@ test("Overview design shows explicitly simulated infrastructure and a truthful G
       exact: true,
     }),
   ).toBeVisible();
+  await openFloorInsights(page, "Infrastructure");
   await expect(
     page
       .getByRole("list", { name: "Overview service health", exact: true })

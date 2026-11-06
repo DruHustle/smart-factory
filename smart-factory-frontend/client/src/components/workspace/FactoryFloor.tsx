@@ -12,6 +12,9 @@ import {
   Trash2,
   Workflow,
   Cable,
+  Activity,
+  Boxes,
+  Server,
   Info,
 } from "lucide-react";
 import { layoutFactory, type FloorLink } from "@shared/factory-floor";
@@ -59,6 +62,9 @@ import {
 } from "./FactoryDiagramEditor";
 import { useFactoryDiagram } from "./useFactoryDiagram";
 import { EngineeringDrawingExport } from "./EngineeringDrawingExport";
+import { FactoryFloorInsights } from "./FactoryFloorInsights";
+import { useWorkspaceLocation } from "@/lib/hashLocation";
+import { resolveFloorView, type FloorView } from "@/lib/floor-insights";
 export function FactoryFloor({
   items,
   links,
@@ -78,6 +84,9 @@ export function FactoryFloor({
   itemDimensions,
   measured = false,
   onGrabChange,
+  insightsRangeMs,
+  onInsightsRangeChange,
+  onInspectItem,
 }: {
   items: InventoryItem[];
   links: FloorLink[];
@@ -97,6 +106,9 @@ export function FactoryFloor({
   itemDimensions?: Record<string, PhysicalDimensions>;
   measured?: boolean;
   onGrabChange?: (active: boolean) => void;
+  insightsRangeMs?: number;
+  onInsightsRangeChange?: (value: number) => void;
+  onInspectItem?: (ref: string) => void;
 }) {
   const { theme } = useTheme();
   const fullscreen = useFloorFullscreen();
@@ -129,14 +141,20 @@ export function FactoryFloor({
         : readFloorOffsets(safeLocalStorage.getItem(preferenceKey)),
     [saved, preferenceKey],
   );
-  const [view, setView] = useState<"3d" | "plan" | "process" | "electrical">(
-      "3d",
-    ),
-    [zone, setZone] = useState("all"),
+  const [workspaceLocation, navigateWorkspace] = useWorkspaceLocation();
+  const viewParams = new URLSearchParams(workspaceLocation.split("?")[1] ?? "");
+  const view = resolveFloorView(viewParams.get("floorView"));
+  const setView = (nextView: FloorView) => {
+    const next = new URLSearchParams(viewParams);
+    if (nextView === "3d") next.delete("floorView"); else next.set("floorView", nextView);
+    navigateWorkspace(`${workspaceLocation.split("?")[0]}${next.size ? `?${next}` : ""}`);
+  };
+  const [zone, setZone] = useState("all"),
     [reset, setReset] = useState(0),
     [search, setSearch] = useState("");
   const [floorHelpOpen, setFloorHelpOpen] = useState(false);
   const schematic = view === "process" || view === "electrical";
+  const insights = view === "telemetry" || view === "inventory" || view === "infrastructure";
   const diagram = useFactoryDiagram({
     scope: drawingScope,
     mode: view === "electrical" ? "electrical" : "process",
@@ -331,9 +349,11 @@ export function FactoryFloor({
                 <Info className="size-4" aria-hidden="true" />
               </summary>
               <div className="absolute left-1/2 top-full z-50 w-[min(18rem,calc(100vw-4rem))] -translate-x-1/2 rounded-md border bg-popover p-3 text-xs leading-relaxed text-popover-foreground shadow-md sm:left-0 sm:translate-x-0">
-                {schematic
-                  ? "Select equipment or a connection to inspect it. Hold and drag to pan; use the zoom controls or scroll to zoom."
-                  : movable
+                {insights
+                  ? "Choose a telemetry preview to expand its chart, or inspect inventory groups, service health and cybersecurity evidence."
+                  : schematic
+                    ? "Select equipment or a connection to inspect it. Hold and drag to pan; use the zoom controls or scroll to zoom."
+                    : movable
                     ? "Hold and drag an item to move it, or empty floor to pan. Release to stop."
                     : "Click equipment to inspect it; hold and drag to pan. Release to stop."}{" "}
                 {view === "3d" &&
@@ -348,7 +368,7 @@ export function FactoryFloor({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-1">
-          {headerActions}
+          {!insights && headerActions}
           <select
             aria-label="Factory floor zone"
             value={zone}
@@ -373,7 +393,7 @@ export function FactoryFloor({
                 controller={connectionRoutes}
               />
             )}
-            <Button
+            {!insights && <Button
               variant="outline"
               size="icon"
               className="size-9"
@@ -385,7 +405,7 @@ export function FactoryFloor({
               }}
             >
               <Focus className="size-4" />
-            </Button>
+            </Button>}
             <Button
               ref={fullscreen.button}
               size="icon"
@@ -410,7 +430,7 @@ export function FactoryFloor({
                 <Maximize2 className="size-4" />
               )}
             </Button>
-            {!layoutDocument && !schematic && (
+            {!layoutDocument && !schematic && !insights && (
               <Button
                 size="icon"
                 variant="ghost"
@@ -432,7 +452,7 @@ export function FactoryFloor({
       </div>
       <div className={`border-b px-4 ${fullscreen.expanded ? "py-0" : "py-2"}`}>
         <div
-          className="grid grid-cols-4 gap-1 rounded-md border p-1 sm:inline-flex"
+          className="flex min-w-0 max-w-full gap-1 overflow-x-auto rounded-md border p-1 sm:flex-wrap"
           role="group"
           aria-label="Floor representation"
         >
@@ -457,12 +477,30 @@ export function FactoryFloor({
                 name: "Electrical wiring",
                 Icon: Cable,
               },
+              {
+                mode: "telemetry",
+                label: "Telemetry",
+                name: "Telemetry",
+                Icon: Activity,
+              },
+              {
+                mode: "inventory",
+                label: "Factory Inventory",
+                name: "Factory Inventory",
+                Icon: Boxes,
+              },
+              {
+                mode: "infrastructure",
+                label: "Infrastructure",
+                name: "Infrastructure",
+                Icon: Server,
+              },
             ] as const
           ).map(({ mode, label, name, Icon }) => (
             <Button
               key={mode}
               size="sm"
-              className="min-h-12 flex-col gap-1 px-1 text-xs sm:min-h-9 sm:flex-row sm:gap-1.5 sm:px-3"
+              className="min-h-9 shrink-0 gap-1.5 px-2 text-xs sm:px-3"
               aria-label={name}
               title={name}
               variant={view === mode ? "default" : "ghost"}
@@ -470,10 +508,7 @@ export function FactoryFloor({
               onClick={() => setView(mode)}
             >
               <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-              <span className="sm:hidden">
-                {mode === "process" ? "P&ID" : label}
-              </span>
-              <span className="hidden sm:inline">{label}</span>
+              <span>{mode === "process" ? <><span className="sm:hidden">P&ID</span><span className="hidden sm:inline">{label}</span></> : label}</span>
             </Button>
           ))}
         </div>
@@ -522,7 +557,7 @@ export function FactoryFloor({
           />
         </>
       )}
-      {zone !== "all" && (
+      {zone !== "all" && !insights && (
         <div
           className="floor-secondary border-b bg-info/5 px-4 py-3"
           aria-label="Selected factory section"
@@ -560,13 +595,25 @@ export function FactoryFloor({
         </div>
       )}
       <div
-        className={`overview-floor-viewport relative min-w-0 ${measured ? "h-[24rem] sm:h-[32rem]" : "h-[25rem] sm:h-[30rem]"}`}
+        className={insights
+          ? "overview-floor-viewport min-w-0"
+          : `overview-floor-viewport relative min-w-0 ${measured ? "h-[24rem] sm:h-[32rem]" : "h-[25rem] sm:h-[30rem]"}`}
         data-testid="factory-floor"
         data-total-items={items.length}
         data-visible-items={visible.length}
         data-view={view}
       >
-        {schematic ? (
+        {insights ? (
+          <FactoryFloorInsights
+            view={view}
+            items={visible}
+            demo={demo}
+            returnTo={returnTo}
+            rangeMs={insightsRangeMs}
+            onRangeChange={onInsightsRangeChange}
+            onInspectItem={(ref) => { setView("3d"); if (onInspectItem) onInspectItem(ref); else selectOnFloor(ref); }}
+          />
+        ) : schematic ? (
           <FactorySchematic
             key={`${drawingScope}:${view}`}
             document={diagram.document}
@@ -605,8 +652,8 @@ export function FactoryFloor({
             onDelete={requestDelete}
           />
         )}
-        {editor}
-        {!schematic && onInventoryDelete && (grabbedRef || selected) && (
+        {!insights && editor}
+        {!schematic && !insights && onInventoryDelete && (grabbedRef || selected) && (
           <Button
             ref={bin}
             type="button"
@@ -626,7 +673,7 @@ export function FactoryFloor({
             {grabbedRef && <span className="text-xs">Drop to delete</span>}
           </Button>
         )}
-        {!schematic && fullscreen.expanded && active && (
+        {!schematic && !insights && fullscreen.expanded && active && (
           <p
             aria-live="polite"
             data-floor-selection-overlay="true"
@@ -635,7 +682,7 @@ export function FactoryFloor({
             {active.name}
           </p>
         )}
-        {!schematic && (
+        {!schematic && !insights && (
           <div
             className="pointer-events-none absolute bottom-3 left-3 right-3 flex w-fit max-w-[calc(100%-1.5rem)] flex-wrap gap-x-3 gap-y-1 rounded-md border bg-background/95 px-2 py-1 text-[10px] text-muted-foreground"
             aria-label="Floor indicator legend"
@@ -720,7 +767,7 @@ export function FactoryFloor({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-      {active && (
+      {active && !insights && (
         <div
           ref={details}
           className="floor-secondary scroll-mt-20 space-y-3 border-t bg-info/5 px-4 py-3"
@@ -824,7 +871,7 @@ export function FactoryFloor({
       )}
       <div className="floor-secondary flex flex-wrap items-center justify-between gap-2 border-t px-4 py-2 text-[11px] text-muted-foreground">
         <span>
-          {schematic
+          {insights ? "Factory-wide insights" : schematic
             ? "Engineering schematic"
             : measured
               ? "Measured floor"
@@ -837,7 +884,7 @@ export function FactoryFloor({
           Explore assets <ArrowUpRight className="size-3" />
         </Link>
       </div>
-      <details className="floor-secondary border-t px-4 py-2">
+      {!insights && <details className="floor-secondary border-t px-4 py-2">
         <summary className="cursor-pointer text-xs font-medium">
           Find an item · {items.length}
         </summary>
@@ -876,7 +923,7 @@ export function FactoryFloor({
               ))}
           </ul>
         </div>
-      </details>
+      </details>}
     </section>
   );
 }

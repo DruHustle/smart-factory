@@ -43,9 +43,9 @@ export async function enterSimulation(
   await expect(
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible();
-  // The landing page contains every item; details remain in each item's menu.
+  // Inventory types now live in the Factory Floor's dedicated Inventory view.
   await expect(
-    page.getByRole("group", { name: "System item types", exact: true }),
+    page.getByRole("button", { name: "Factory Inventory", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("region", { name: "Factory floor overview", exact: true }),

@@ -485,6 +485,7 @@ export function FactoryWorkspace({
                 items={items}
                 links={gatewayLinksForFloor(items)}
                 selected={selected}
+                onInspectItem={(ref) => { setSelected(ref); setTab("equipment"); }}
                 onSelect={(ref) => setSelected(ref || null)}
                 returnTo={`/${mode === "inventory" ? "inventory" : ""}?factory=${id}`}
                 demo={c.demo}
@@ -570,7 +571,7 @@ export function FactoryWorkspace({
               }
             />
           )}
-          <section
+          {mode === "inventory" && <section
             className="rounded-lg border bg-card p-4"
             aria-label="Factory inventory"
           >
@@ -634,7 +635,7 @@ export function FactoryWorkspace({
                 create an inventory item or place an existing one.
               </p>
             )}
-          </section>
+          </section>}
         </>
       )}
     </div>
