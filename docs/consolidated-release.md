@@ -80,7 +80,7 @@ It never rebuilds a qualified image, contacts the production host or installs
 anything. The legacy preparation module contributes only its pure OCI-byte
 verifier; its legacy repository cloning/preparation functions are not executed.
 
-On the owner's existing trusted SSH workstation, use the unchanged installer:
+On the owner's existing trusted SSH workstation, use the maintained installer:
 
 ```sh
 python3 smart-factory-frontend/scripts/deploy-vm.py --check \
@@ -90,6 +90,23 @@ python3 smart-factory-frontend/scripts/deploy-vm.py --check \
   --api-origin "$VERIFIED_FACTORY_API_ORIGIN" \
   --ui-origin https://factory.onesa.eu
 ```
+
+The selected SSH alias retains its private route and configured identity. The
+helper does not require an Ed25519 key when the workstation already uses another
+authorized identity. For a separate local key file, pass `--ssh-identity` or set
+`SMART_FACTORY_SSH_IDENTITY`; the key is used locally for SSH/SCP and is never
+uploaded to the VM.
+
+This installer updates an existing healthy API/worker pair. It cannot bootstrap
+a blank Onesa destination. Host relocation first needs the live source inventory
+and a coordinated transfer of its retained configuration, images and any local
+data. Include the separate Factory BaSyx/Caddy network, MQTT identities,
+certificates and broker/session storage in that inventory, and check the shared
+destination's ports and capacity. Keep Factory's ingress independently managed
+from Logistics. Stop the source singleton before activating the destination
+worker, retain the current frontend deployment, and preserve the source VM's
+disks until the replacement and recovery path are verified. Starting another
+worker merely to satisfy the existing-release preflight is not a bootstrap path.
 
 Only after that read-only preflight succeeds, run the same command with
 `--deploy` instead of `--check`. Use its private receipt and `--status` to reconnect;
