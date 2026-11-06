@@ -15,6 +15,11 @@ individual administrator account, requires the live workspace, and keeps the
 Node-RED service credential on the server. Shared demo accounts and public demo
 deployments cannot use package management.
 
+The API advertises `node-red-package-management-v1` as an optional capability.
+The panel is hidden when a compatible older rollback API lacks it, so that UI
+does not issue unsupported management requests. Core runtime compatibility and
+the exact-source promotion checks retain their existing requirements.
+
 The existing Node-RED deployment runs on the **Pi gateway**, with host networking
 and its editor bound to **127.0.0.1:1880/admin**. The Oracle API uses a Docker
 bridge network. Their loopback interfaces are different: setting a URL in the

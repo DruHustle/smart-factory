@@ -1,4 +1,5 @@
 import { DemoAdministration } from "@/components/workspace/DemoAdministration";
+import { useRuntimeCapability } from "@/components/RuntimeBoundary";
 import { lazy, Suspense, useState } from "react";
 import { EquipmentSymbol } from "@/components/workspace/VisualEvidence";
 import { Link, useParams } from "wouter";
@@ -82,6 +83,7 @@ export default function Administration() {
 function Integrations() {
   const summary = trpc.system.connections.useQuery();
   const { user } = useAuth();
+  const packagesSupported = useRuntimeCapability("node-red-package-management-v1");
   return (
     <div className="space-y-4">
       <Card>
@@ -198,7 +200,7 @@ function Integrations() {
           )}
         </CardContent>
       </Card>
-      {user?.access?.canAdminister && <NodeRedPackages />}
+      {user?.access?.canAdminister && packagesSupported ? <NodeRedPackages /> : null}
       <OperatingStatus />
       <details className="rounded-lg border bg-card p-4" open>
         <summary className="cursor-pointer font-medium">
