@@ -1,0 +1,45 @@
+# Optional overlay for compose.yaml. Start explicitly after private enrollment;
+# this is never included by the existing release/deployment scripts.
+services:
+  node-red-admin-tunnel:
+    profiles: [node-red-management]
+    image: ${NODE_RED_SSH_CLIENT_IMAGE:?Set an operator-reviewed SSH client image at an immutable digest}
+    # Share only the API network namespace. The Pi editor stays on Pi loopback;
+    # 18880 is a private listener inside the API namespace, with no published port.
+    network_mode: service:api
+    depends_on:
+      api: { condition: service_healthy }
+    user: ${NODE_RED_SSH_CLIENT_UID:?Set the non-root UID and GID allowed to read the private SSH config}
+    entrypoint: [ssh]
+    command:
+      - -F
+      - /run/node-red-ssh/config
+      - -N
+      - -T
+      - -o
+      - BatchMode=yes
+      - -o
+      - StrictHostKeyChecking=yes
+      - -o
+      - IdentitiesOnly=yes
+      - -o
+      - ExitOnForwardFailure=yes
+      - -o
+      - ServerAliveInterval=30
+      - -o
+      - ServerAliveCountMax=3
+      - -L
+      - 127.0.0.1:18880:127.0.0.1:1880
+      - node-red-gateway
+    volumes:
+      - ${NODE_RED_SSH_CONFIG_DIR:?Set the existing authorized private SSH configuration directory}:/run/node-red-ssh:ro
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    init: true
+    restart: unless-stopped
+    pids_limit: 32
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options: { max-size: "5m", max-file: "2" }
