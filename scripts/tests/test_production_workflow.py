@@ -1,6 +1,8 @@
 from copy import deepcopy
+import ast
 import importlib.util
 from pathlib import Path
+import re
 import sys
 import unittest
 
@@ -82,6 +84,24 @@ class ProductionWorkflowTests(unittest.TestCase):
         required, optional = source.split('export const optionalCapabilities =', 1)
         self.assertNotIn('"assistant-provider-selection-v1"', required)
         self.assertIn('"assistant-provider-selection-v1"', optional)
+    def test_bundle_rollback_excludes_only_optional_ui_capabilities(self):
+        contract = (ROOT / 'smart-factory-frontend/shared/runtime-contract.ts').read_text()
+        def capabilities(name):
+            declaration = re.search(r'export const ' + name + r' = \[([^]]*)\]', contract, re.S)
+            self.assertIsNotNone(declaration, name)
+            return set(re.findall(r'"([^"]+)"', declaration.group(1)))
+        # Read only the constant declarations: importing this script starts Docker.
+        smoke = ast.parse((ROOT / 'smart-factory-frontend/scripts/bundle-smoke.py').read_text())
+        constants = {node.targets[0].id: node.value for node in smoke.body
+                     if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name)}
+        additive = constants['ADDITIVE_FALLBACK_CAPABILITIES']
+        self.assertIsInstance(additive, ast.BinOp)
+        self.assertIsInstance(additive.op, ast.BitOr)
+        self.assertIsInstance(additive.left, ast.Name)
+        self.assertEqual(additive.left.id, 'OT_EXPANDED_CAPABILITIES')
+        excluded = ast.literal_eval(constants['OT_EXPANDED_CAPABILITIES']) | ast.literal_eval(additive.right)
+        self.assertEqual(excluded, capabilities('optionalCapabilities'))
+        self.assertFalse(excluded & capabilities('requiredCapabilities'))
     def test_backend_identity_change_does_not_rename_dns(self):
         source = (ROOT / 'smart-factory-backend/deploy/terraform/oracle-basyx/main.tf').read_text()
         self.assertRegex(source, r'hostname_label\s*=\s*var\.instance_name')
