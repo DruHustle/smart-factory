@@ -31,8 +31,8 @@ baseline repositories and container dependencies still requires internet access.
 - At least 4 GiB of memory allocated to Docker, 12 GiB of free local working
   space, and local port 3110 available. Large existing caches or concurrent
   workloads may require more space.
-- For deployment: existing OpenSSH access to the VM using
-  `~/.ssh/id_ed25519`, an already trusted VM host key, and the existing user's
+- For deployment: existing OpenSSH access to the VM using its configured
+  identity, an already trusted VM host key, and the existing user's
   noninteractive sudo access. Load an encrypted key into your normal SSH agent
   before starting. The installer keeps strict host-key verification enabled.
 - The existing VM deployment at `/opt/smart-factory-backend`, Docker Compose

@@ -24,7 +24,7 @@ frontend's first-party API proxy and verify sessions, allowed/denied origins and
 reset-link redemption on the new domain.
 
 The combined Node/.NET image and the `api`/`worker` Compose services are owned
-by the [frontend repository's release contract](https://github.com/DruHustle/smart-factory-frontend/blob/main/deploy/oracle/README.md).
+by the [canonical frontend component's release contract](../../../smart-factory-frontend/deploy/oracle/README.md).
 Keep `BACKEND_DEPLOYMENT_MODE=render-bundle` and the existing role names even
 on Oracle or a future Kubernetes deployment: these identify the implemented
 bundled runtime contract. An unsupported `kubernetes` mode is not introduced.
