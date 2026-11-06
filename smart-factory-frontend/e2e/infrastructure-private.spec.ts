@@ -16,6 +16,44 @@ async function login(page: Page, role: string) {
     page.getByRole("heading", { name: "Overview", exact: true }),
   ).toBeVisible({ timeout: 15000 });
 }
+test("compatible older API rollback hides Node-RED management without issuing its requests", async ({
+  page,
+}) => {
+  let managementRequests = 0;
+  page.on("request", (request) => {
+    if (
+      request.url().includes("/api/trpc/") &&
+      request.url().includes("nodeRed.")
+    )
+      managementRequests++;
+  });
+  await page.route("**/api/runtime/contract", async (route) => {
+    const response = await route.fetch();
+    const contract = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...contract,
+        capabilities: contract.capabilities.filter(
+          (capability: string) =>
+            capability !== "node-red-package-management-v1",
+        ),
+      },
+    });
+  });
+  await login(page, "admin");
+  await page.goto("/#/administration/integrations");
+  await expect(
+    page.getByRole("heading", { name: "Administration", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Configured connection profiles", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Node-RED nodes, plugins & libraries", { exact: true }),
+  ).toHaveCount(0);
+  expect(managementRequests).toBe(0);
+});
 for (const role of ["viewer", "operator", "engineer"])
   test(`private ${role} cannot inspect installation infrastructure`, async ({
     page,
