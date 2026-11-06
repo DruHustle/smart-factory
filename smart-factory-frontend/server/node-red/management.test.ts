@@ -478,4 +478,29 @@ describe("Node-RED reviewed install and recovery", () => {
     expect((await settled(store)).state).toBe("failed");
     expect(runtime.posts).toBe(0);
   });
+  it.each(["load error", "pending version", "different version"] as const)(
+    "keeps conflicting inventory %s unconfirmed despite a later clean module response",
+    async (discrepancy) => {
+      const store = memoryStore(), runtime = runtimeFixture();
+      const fetcher: typeof fetch = async (input, init = {}) => {
+        const response = await runtime.fetcher(input, init);
+        if (runtime.posts && init.method !== "POST" && String(input).endsWith("/nodes")) {
+          const sets = await response.json() as Array<Record<string, unknown>>;
+          for (const set of sets) {
+            if (discrepancy === "load error") set.err = "Synthetic inventory error";
+            else if (discrepancy === "pending version") set.pending_version = selection.version;
+            else set.version = "9.9.9";
+          }
+          return new Response(JSON.stringify(sets), { headers: response.headers });
+        }
+        return response;
+      };
+      const service = new NodeRedPackageService(store, config, fetcher);
+      const { request } = await start(service);
+      expect((await settled(store)).state).toBe("unconfirmed");
+      await expect(service.install(7, { ...request, requestId: randomUUID() }))
+        .rejects.toThrow(/pending or unconfirmed/);
+      expect(runtime.posts).toBe(1);
+    },
+  );
 });
