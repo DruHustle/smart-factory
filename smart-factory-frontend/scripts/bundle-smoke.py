@@ -12,6 +12,7 @@ BASE = 'http://127.0.0.1:3110'
 OT_EXPANDED_CAPABILITIES = {'ot-alarm-conditions-v1', 'ot-operations-v1', 'ot-investigation-context-v1', 'ot-site-timezone-v1'}
 ADDITIVE_FALLBACK_CAPABILITIES = OT_EXPANDED_CAPABILITIES | {
     'assistant-provider-selection-v1', 'ot-incident-review-v1', 'ot-follow-up-actions-v1',
+    'node-red-package-management-v1',
 }
 def run(args, capture=False):
     return subprocess.run(args, cwd=ROOT, check=True, text=True, stdout=subprocess.PIPE if capture else None).stdout
