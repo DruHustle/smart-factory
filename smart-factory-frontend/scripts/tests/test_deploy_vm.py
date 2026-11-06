@@ -727,8 +727,10 @@ class DetachedAndTransportTests(unittest.TestCase):
     def setUp(self):
         vm.configure_origins()
         vm.configure_ssh_target()
+        vm.configure_ssh_identity()
         self.addCleanup(vm.configure_origins)
         self.addCleanup(vm.configure_ssh_target)
+        self.addCleanup(vm.configure_ssh_identity)
         self.temporary = tempfile.TemporaryDirectory()
         self.directory = Path(self.temporary.name) / "release"
         self.directory.mkdir(mode=0o700)
@@ -771,12 +773,19 @@ class DetachedAndTransportTests(unittest.TestCase):
     def test_ssh_passes_selected_target_and_origins_to_the_remote_helper(self):
         vm.configure_origins("https://api.onesa.eu", "https://factory.onesa.eu")
         vm.configure_ssh_target("factory-owner@onesa-oracle")
-        with patch.object(vm, "ssh_options", return_value=[]), \
+        key = self.directory / "maintenance rsa"
+        key.write_text("synthetic-private-identity-never-transmitted")
+        vm.configure_ssh_identity(str(key))
+        with patch.object(vm.shutil, "which", return_value="/usr/bin/tool"), \
              patch.object(vm, "run_command", return_value=subprocess.CompletedProcess([], 0, '{}', '')) as run:
             vm.remote_call("check")
         arguments = shlex.split(run.call_args.args[0][-1])
         self.assertEqual(arguments[-6:], vm.deployment_arguments())
         self.assertEqual(run.call_args.args[0][-2], vm.HOST)
+        self.assertIn(str(key), run.call_args.args[0][:-2])
+        self.assertNotIn(str(key), arguments)
+        self.assertNotIn("--ssh-identity", arguments)
+        self.assertNotIn(key.read_text(), run.call_args.kwargs["input_text"])
 
     def test_origin_drift_prevents_detached_execution_and_reconnect(self):
         vm.write_json_private(self.directory / "request.json", {"manifestSha256": vm.manifest_digest(),
@@ -813,12 +822,12 @@ class DetachedAndTransportTests(unittest.TestCase):
         state = self.directory / "receipt.json"
         args = argparse.Namespace(state=str(state), status=False, once=False, bundle="bundle.zip", deploy=True)
         staged = {"status": "STAGED", "directory": directory, "manifestSha256": vm.manifest_digest(), **vm.deployment_target()}
-        home = self.directory / "ssh-home"
-        (home / ".ssh").mkdir(parents=True)
-        (home / ".ssh/id_ed25519").write_text("synthetic")
+        key = self.directory / "maintenance rsa"
+        key.write_text("synthetic")
+        vm.configure_ssh_identity(str(key))
         with patch.object(vm, "find_bundle", return_value=self.directory / "qualified-arm64-bundle.zip"), \
              patch.object(vm, "remote_call", side_effect=[{"status": "PREFLIGHT_PASSED"}, staged, {"status": "RUNNING"}]) as remote, \
-             patch.object(vm.Path, "home", return_value=home), patch.object(vm.shutil, "which", return_value="/usr/bin/tool"), \
+             patch.object(vm.shutil, "which", return_value="/usr/bin/tool"), \
              patch.object(vm, "run_command") as run, patch.object(vm, "monitor", return_value=0), \
              contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(vm.run_client(args), 0)
@@ -830,7 +839,8 @@ class DetachedAndTransportTests(unittest.TestCase):
             self.assertEqual(command[0], "scp")
             self.assertIn("StrictHostKeyChecking=yes", command)
             self.assertIn("IdentitiesOnly=yes", command)
-            self.assertIn(str(home / ".ssh/id_ed25519"), command)
+            self.assertIn(str(key), command)
+            self.assertNotEqual(command[-2], str(key))
             destinations.append(command[-1])
         self.assertEqual(destinations, [vm.HOST + ":" + directory + "/" + name
                          for name in ("deploy-vm.py", "release-manifest.json", "qualified-arm64-bundle.zip")])
@@ -840,18 +850,61 @@ class DetachedAndTransportTests(unittest.TestCase):
         self.assertEqual(receipt["directory"], directory)
 
     def test_strict_ssh_never_accepts_new_host_keys_or_password_prompt(self):
-        home = self.directory / "home"
-        (home / ".ssh").mkdir(parents=True)
-        (home / ".ssh/id_ed25519").write_text("synthetic")
-        with patch.object(vm.Path, "home", return_value=home), patch.object(vm.shutil, "which", return_value="/usr/bin/tool"):
+        with patch.object(vm.shutil, "which", return_value="/usr/bin/tool"):
             options = vm.ssh_options()
         self.assertIn("StrictHostKeyChecking=yes", options)
         self.assertIn("BatchMode=yes", options)
         self.assertIn("PasswordAuthentication=no", options)
         self.assertIn("IdentitiesOnly=yes", options)
         self.assertIn("PreferredAuthentications=publickey", options)
-        self.assertEqual(options[-2:], ["-i", str(home / ".ssh/id_ed25519")])
+        self.assertNotIn("-i", options)
         self.assertNotIn("StrictHostKeyChecking=no", options)
+
+    @unittest.skipUnless(vm.shutil.which("ssh") and vm.shutil.which("scp"), "OpenSSH configuration check requires ssh and scp")
+    def test_real_openssh_keeps_alias_route_and_identity_without_a_default_ed25519_file(self):
+        key = self.directory / "rsa-identity"
+        key.write_text("synthetic")
+        config = self.directory / "ssh-config"
+        config.write_text('Host factory-private\n  HostName 192.0.2.10\n  User factory-owner\n'
+                          '  Port 2205\n  IdentityFile "' + str(key) + '"\n')
+        # -G resolves configuration only; it does not open a network connection.
+        result = subprocess.run(["ssh", "-G", "-F", str(config), *vm.ssh_options(), "factory-private"],
+                                capture_output=True, text=True, timeout=10, check=True)
+        configuration = [line.split(" ", 1) for line in result.stdout.splitlines()]
+        resolved = {name: value for name, value in configuration}
+        self.assertEqual(resolved["hostname"], "192.0.2.10")
+        self.assertEqual(resolved["user"], "factory-owner")
+        self.assertEqual(resolved["port"], "2205")
+        self.assertEqual([value for name, value in configuration if name == "identityfile"], [str(key)])
+        self.assertIn(resolved["stricthostkeychecking"], ("yes", "true"))
+        self.assertIn(resolved["identitiesonly"], ("yes", "true"))
+
+    def test_missing_or_invalid_identity_stops_before_manifest_or_remote_work(self):
+        for value in (str(self.directory / "missing"), str(self.directory), "", "identity\nother"):
+            with self.subTest(value=value), patch.object(vm, "validate_manifest") as manifest, \
+                 patch.object(vm, "run_client") as client, contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(vm.main(["--ssh-identity", value]), 1)
+                manifest.assert_not_called()
+                client.assert_not_called()
+
+    def test_identity_environment_default_and_explicit_override_remain_local(self):
+        default_key, selected_key = self.directory / "default-rsa", self.directory / "selected-rsa"
+        for key in (default_key, selected_key):
+            key.write_text("synthetic")
+        with patch.dict(os.environ, {"SMART_FACTORY_SSH_IDENTITY": str(default_key)}), \
+             patch.object(vm, "validate_manifest", return_value=self.manifest), \
+             patch.object(vm, "run_client", return_value=0):
+            self.assertEqual(vm.main([]), 0)
+            self.assertEqual(vm.SSH_IDENTITY, default_key)
+            self.assertEqual(vm.main(["--ssh-identity", str(selected_key)]), 0)
+            self.assertEqual(vm.SSH_IDENTITY, selected_key)
+            with patch.object(vm, "remote_check", return_value={"status": "PREFLIGHT_PASSED"}), \
+                 contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(vm.main(["--remote-mode", "check"]), 0)
+            self.assertIsNone(vm.SSH_IDENTITY)
+            with patch.object(vm, "remote_check") as remote, contextlib.redirect_stderr(io.StringIO()):
+                self.assertEqual(vm.main(["--remote-mode", "check", "--ssh-identity", str(selected_key)]), 1)
+                remote.assert_not_called()
 
     def test_command_failure_and_nonruntime_errors_do_not_echo_secret_content(self):
         secret = "a-secret-that-must-not-appear"
