@@ -1,4 +1,5 @@
 import { DemoAdministration } from "@/components/workspace/DemoAdministration";
+import { useRuntimeCapability } from "@/components/RuntimeBoundary";
 import { lazy, Suspense, useState } from "react";
 import { EquipmentSymbol } from "@/components/workspace/VisualEvidence";
 import { Link, useParams } from "wouter";
@@ -20,7 +21,10 @@ import { Switch } from "@/components/ui/switch";
 import { itemHref } from "@shared/inventory";
 import { toast } from "sonner";
 const UserAccess = lazy(() => import("./UserAccess")),
-  OnesaIntegration = lazy(() => import("./OnesaIntegration"));
+  OnesaIntegration = lazy(() => import("./OnesaIntegration")),
+  NodeRedPackages = lazy(
+    () => import("@/components/workspace/NodeRedPackages"),
+  );
 export default function Administration() {
   const { user } = useAuth(),
     { section = "integrations" } = useParams<{ section?: string }>(),
@@ -78,6 +82,8 @@ export default function Administration() {
 }
 function Integrations() {
   const summary = trpc.system.connections.useQuery();
+  const { user } = useAuth();
+  const packagesSupported = useRuntimeCapability("node-red-package-management-v1");
   return (
     <div className="space-y-4">
       <Card>
@@ -194,6 +200,7 @@ function Integrations() {
           )}
         </CardContent>
       </Card>
+      {user?.access?.canAdminister && packagesSupported ? <NodeRedPackages /> : null}
       <OperatingStatus />
       <details className="rounded-lg border bg-card p-4" open>
         <summary className="cursor-pointer font-medium">

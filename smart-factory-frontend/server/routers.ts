@@ -48,6 +48,7 @@ import { COOKIE_NAME } from "@shared/const";
 import { TRPCError } from "@trpc/server";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
+import { nodeRedRouter } from "./node-red/router";
 import { sdk } from "./_core/sdk";
 import {
   publicProcedure,
@@ -509,6 +510,7 @@ export const appRouter = router({
   equipment: equipmentRouter,
   onesa: onesaRouter,
   system: systemRouter,
+  nodeRed: nodeRedRouter,
   auth: router({
     passwordResetPolicy: publicProcedure.query(() => passwordResetPolicy()),
     registrationPolicy: publicProcedure.query(() => ({

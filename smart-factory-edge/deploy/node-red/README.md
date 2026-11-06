@@ -1,5 +1,11 @@
 # Smart Factory Node-RED OT integration
 
+For optional administrator package installation from the Smart Factory UI, see
+[Node-RED package management](../../../smart-factory-frontend/docs/NODE_RED_PACKAGE_MANAGEMENT.md).
+That guide covers the separate API-to-Pi SSH route, exact package review,
+restricted token, persistent install status and gateway enrollment. Its source
+does not activate a runtime or change OT flows.
+
 **Optional, off by default, no live factory cutover in this change.** Node-RED
 provides the device/protocol/transform layer. The existing **Python Smart Factory
 Edge Agent** owns MQTT identity, policy, validation, provenance, durable SQLite

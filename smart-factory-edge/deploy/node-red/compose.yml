@@ -14,12 +14,32 @@ services:
       NODE_RED_CREDENTIAL_SECRET: ${NODE_RED_CREDENTIAL_SECRET:?Set credential secret}
       NODE_RED_ADMIN_USER: ${NODE_RED_ADMIN_USER:?Set admin username}
       NODE_RED_ADMIN_PASSWORD_HASH: ${NODE_RED_ADMIN_PASSWORD_HASH:?Set bcrypt password hash}
+      # Optional enrollment for the private Factory package-management broker.
+      NODE_RED_RUNTIME_ID: ${NODE_RED_RUNTIME_ID:-}
+      NODE_RED_ADMIN_TOKEN: ${NODE_RED_ADMIN_TOKEN:-}
+      NPM_CONFIG_REGISTRY: https://registry.npmjs.org
+      NPM_CONFIG_SAVE_EXACT: "true"
+      NPM_CONFIG_PACKAGE_LOCK: "true"
     volumes:
       - node_red_data:/data
       - ./settings.js:/opt/smart-factory/settings.js:ro
-    command: ["node", "node_modules/node-red/red.js", "--userDir", "/data", "--settings", "/opt/smart-factory/settings.js"]
+    command:
+      [
+        "node",
+        "node_modules/node-red/red.js",
+        "--userDir",
+        "/data",
+        "--settings",
+        "/opt/smart-factory/settings.js",
+      ]
     healthcheck:
-      test: [CMD, node, -e, "fetch('http://127.0.0.1:1880/admin/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"]
+      test:
+        [
+          CMD,
+          node,
+          -e,
+          "fetch('http://127.0.0.1:1880/admin/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))",
+        ]
       interval: 15s
       timeout: 5s
       retries: 20

@@ -15,6 +15,13 @@ const compatible = {
   capabilities: [...requiredCapabilities],
   versioned: true,
 };
+it("keeps Node-RED package management optional for a compatible older API rollback", () => {
+  expect(optionalCapabilities).toContain("node-red-package-management-v1");
+  expect(requiredCapabilities as readonly string[]).not.toContain(
+    "node-red-package-management-v1",
+  );
+  expect(runtimeCompatibility(compatible, true)).toBeNull();
+});
 it("keeps an older qualified API compatible when additive provider selection is absent", () => {
   expect(
     (requiredCapabilities as readonly string[]).includes(
@@ -64,6 +71,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect((await getRuntimeContract()).schema.ready).toBe(true);
       expect((await getRuntimeContract()).capabilities).toContain(
         "assistant-provider-selection-v1",
+      );
+      expect((await getRuntimeContract()).capabilities).toContain(
+        "node-red-package-management-v1",
       );
       const expected = await migrationManifest();
       expect(expected.digest).toMatch(/^[a-f0-9]{64}$/);
