@@ -1,9 +1,24 @@
 #!/usr/bin/env python3
 """Install workspace launchers. Default is a read-only plan; --execute writes them."""
 import argparse
+import importlib.util
 import json
 from pathlib import Path
 import shutil
+import sys
+
+
+def validate_sources(sources):
+    """Keep incompatible canonical layouts out of legacy launcher configuration."""
+    sys.dont_write_bytecode = True
+    spec = importlib.util.spec_from_file_location(
+        "smart_factory_legacy_manual_cli", Path(__file__).with_name("cli.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        module.repositories(sources)
+    except module.ReleaseError as error:
+        raise SystemExit(str(error)) from None
 
 
 def main():
@@ -35,6 +50,7 @@ def main():
             raise SystemExit("Existing launcher/document differs; preserve and review it before replacing: " + str(destination))
     if (target / "config.json").is_symlink():
         raise SystemExit("Existing config.json is a symlink; inspect it before installing.")
+    validate_sources(sources)
     print(json.dumps({"target": str(target), "sources": str(sources), "files": list(files),
                       "mode": "install" if args.execute else "plan"}, indent=2))
     if args.execute:

@@ -421,6 +421,29 @@ class WorkspaceCliTests(unittest.TestCase):
                              {key: str(path) for key, path in repos.items()})
             self.assertFalse(release.exists())
 
+    def test_canonical_checkout_is_rejected_before_installing_legacy_launchers(self):
+        root = self.path / "canonical workspace with spaces"
+        root.mkdir()
+        (root / "AGENTS.md").write_text("# fixture\n")
+        (root / "local-tools").mkdir()
+        for name in cli.COMPONENTS:
+            (root / ("smart-factory-" + name)).mkdir()
+        subprocess.run(["git", "init", "-q", str(root)], check=True)
+        with patch.object(cli, "capture", wraps=cli.capture) as capture:
+            with self.assertRaisesRegex(cli.ReleaseError, "share one Git root") as failure:
+                cli.repositories(root)
+        self.assertIn("docs/consolidated-release.md", str(failure.exception))
+        self.assertTrue(all(call.args[0][0] == "git" for call in capture.call_args_list))
+        command = [sys.executable, str(SOURCE.parent / "install.py"), "--workspace", str(root),
+                   "--source-root", str(root), "--execute"]
+        result = subprocess.run(command, cwd="/", capture_output=True, text=True, timeout=30)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("share one Git root", result.stderr)
+        self.assertIn("docs/consolidated-release.md", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertFalse((root / "local-tools/manual deployment").exists())
+        self.assertFalse((root / "local-tools/deployment-evidence").exists())
+
     def test_installer_rejects_linked_tools_and_destinations(self):
         root = self.path / "unsafe workspace"
         root.mkdir()

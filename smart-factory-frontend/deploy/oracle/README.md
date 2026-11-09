@@ -53,10 +53,13 @@ The [16 October manifest](release-manifest.json) is historical evidence. It does
 
 ## Prepare a candidate
 
-In the canonical workspace, use the [manual deployment entry points](../../scripts/manual-deployment/README.md)
-under `"local-tools/manual deployment/"`. They default to offline plans and reuse
-the maintained qualification and VM engines. Historical helpers in release
-evidence are retained records, not commands for the next release.
+For `DruHustle/smart-factory`, use the [canonical release runbook](../../../docs/consolidated-release.md)
+for current-main qualification, exact API/worker artifact preparation and the
+controlled frontend workflow with its reviewed prior deployment.
+The [legacy component launchers](../../scripts/manual-deployment/README.md) require
+separate original Git checkouts and retain a different workflow input contract.
+Do not install them against the consolidated checkout or substitute only its
+repository name. Historical helpers in release evidence remain retained records.
 
 For the reviewed private source delivery, use the
 [manual VM installer guide](../../docs/manual-vm-deployment.md). Its standalone

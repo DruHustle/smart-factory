@@ -1,7 +1,10 @@
 # Smart Factory
 
-Workspace operators: use the [manual deployment commands](scripts/manual-deployment/README.md)
-for API/worker qualification, Vercel promotion, edge packaging and verification.
+Workspace operators: use the [canonical release runbook](../docs/consolidated-release.md)
+for exact-source qualification, API/worker preparation and controlled Vercel promotion.
+The [legacy component launchers](scripts/manual-deployment/README.md) require three
+separate original Git checkouts; their workflow contracts do not apply to this
+canonical checkout.
 
 One industrial workspace for AAS-backed assets, independent devices, gateways, native 3D equipment and OT security evidence. React, Vite and the existing orange/white/cyan themes share an Express/tRPC API and PostgreSQL inventory.
 
@@ -15,9 +18,11 @@ Production topology is **Vercel UI → Oracle ARM64 API**, with a separate **sin
 
 ## Local development
 
-All three repositories belong under the plain `smart-factory` workspace parent.
-See [workspace naming and the Mac migration command](docs/project-naming.md) to
-consolidate existing checkouts while preserving local work.
+The canonical `DruHustle/smart-factory` checkout contains all three component
+directories. Run the commands below from `smart-factory-frontend/`.
+The [workspace naming and Mac migration guide](docs/project-naming.md) remains a
+reference for preserving pre-existing separate checkouts and local work; it does
+not replace the canonical source or authorize deleting those preserved copies.
 
 Use Node 22.12+, pnpm 10, PostgreSQL 16 and Redis. Companion services use the pinned .NET 10 LTS SDK in the backend repository; edge dependencies are pinned in the edge repository.
 

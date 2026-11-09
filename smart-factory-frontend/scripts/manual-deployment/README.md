@@ -1,6 +1,20 @@
-# Smart Factory manual deployment
+# Legacy Smart Factory component deployment
 
-`local-tools/manual deployment/` is the entry point. The physical `local-tools`
+These launchers support the original three separate component Git checkouts.
+They retain the old repository identities, CI selection and workflow input
+contracts for existing installations and recovery. For the canonical
+`DruHustle/smart-factory` checkout, use the [root release runbook](../../../docs/consolidated-release.md):
+its qualification, API artifact preparation and controlled frontend dispatch have
+different source and rollback requirements. Changing only the repository slug
+does not adapt this launcher.
+
+The installer validates the selected component Git roots before writing any
+launcher or configuration. A consolidated checkout is rejected with the canonical
+runbook location. Existing installed launchers and separate checkouts are not
+changed by this clarification; inventory their actual use and freeze old deployment
+producers only through the reviewed retirement procedure.
+
+For a verified legacy workspace, `local-tools/manual deployment/` is the entry point. The physical `local-tools`
 directory also contains release evidence under `local-tools/deployment-evidence`.
 All paths below preserve the space.
 
