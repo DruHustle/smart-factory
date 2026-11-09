@@ -1,6 +1,6 @@
 # Backend deployment
 
-The maintained production topology is Oracle ARM64 API plus a singleton telemetry/notification worker, with a separate prebuilt Vercel UI. The frontend repository owns the combined image, current Oracle Compose configuration and cross-repository release procedure. Use its [Oracle runbook](https://github.com/DruHustle/smart-factory-frontend/blob/main/deploy/oracle/README.md) and [operating guide](https://github.com/DruHustle/smart-factory-frontend/blob/main/docs/operations.md). Dated release records identify historical candidates, not the currently running release.
+The maintained production topology is Oracle ARM64 API plus a singleton telemetry/notification worker, with a separate prebuilt Vercel UI. The frontend component owns the combined image and current Oracle Compose configuration. The [canonical release runbook](../../docs/consolidated-release.md) owns the repository-level release and retirement procedure. Use its [Oracle runbook](../../smart-factory-frontend/deploy/oracle/README.md) and [operating guide](../../smart-factory-frontend/docs/operations.md). Dated release records identify historical candidates, not the currently running release.
 
 ## Prepare and qualify
 

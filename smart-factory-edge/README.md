@@ -55,7 +55,7 @@ The existing Pi-local relay optionally preserves an `integration` provenance obj
 
 ## Trusted telemetry candidate (27 October 2026)
 
-The candidate aligns site/line/device IDs with the [coordinated observation contract](https://github.com/DruHustle/smart-factory-frontend/blob/feat/product-experience-trust/docs/trusted-observations.md). Dots and colons remain valid application identities. Source units and reviewed raw scaling evidence survive forwarding and durable retries; absent legacy provenance/units are not relabelled as verified live evidence. New WROVER acquisition metadata identifies source quality, boot session and sequence. Broker retention cannot be cleared by a payload.
+The candidate aligns site/line/device IDs with the [coordinated observation contract](../smart-factory-frontend/docs/trusted-observations.md). Dots and colons remain valid application identities. Source units and reviewed raw scaling evidence survive forwarding and durable retries; absent legacy provenance/units are not relabelled as verified live evidence. New WROVER acquisition metadata identifies source quality, boot session and sequence. Broker retention cannot be cleared by a payload.
 
 Gateway dependencies retain their existing versions and now include official artifact hashes. Regenerate with `python3 raspberry-pi/scripts/lock-gateway-dependencies.py`, review the lock changes, and install with `pip install --require-hashes -r raspberry-pi/requirements.txt`.
 
