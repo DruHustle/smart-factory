@@ -1,66 +1,45 @@
 # Smart Factory workspace and repository names
 
-The product name is **Smart Factory**. The canonical local parent is
-`/Users/andrewgotora/Software Development/GitHub/smart-factory`.
-It is a plain workspace containing three independent Git repositories.
+The product name is **Smart Factory**. The canonical GitHub repository is
+[DruHustle/smart-factory](https://github.com/DruHustle/smart-factory), with default
+branch `main`. Its component directories retain their existing names:
 
-| Component | Folder under the parent | GitHub repository | Default branch |
-| --- | --- | --- | --- |
-| Frontend and Node API | `smart-factory-frontend` | [DruHustle/smart-factory-frontend](https://github.com/DruHustle/smart-factory-frontend) | `main` |
-| .NET services | `smart-factory-backend` | [DruHustle/smart-factory-backend](https://github.com/DruHustle/smart-factory-backend) | `main` |
-| Factory gateway and firmware | `smart-factory-edge` | [DruHustle/smart-factory-edge](https://github.com/DruHustle/smart-factory-edge) | `master` |
+| Component | Directory in the canonical repository |
+| --- | --- |
+| Frontend and Node API | [`smart-factory-frontend`](../../smart-factory-frontend) |
+| .NET services | [`smart-factory-backend`](../../smart-factory-backend) |
+| Factory gateway and firmware | [`smart-factory-edge`](../../smart-factory-edge) |
 
-## Move existing Mac checkouts
+For the combined release procedure, source qualification and repository-retirement
+conditions, use the [canonical release runbook](../../docs/consolidated-release.md).
+A nested component directory is not a separate Git checkout. Do not run the legacy
+separate-repository deployment installer against this layout.
 
-Close development servers and open terminals outside the project directories.
-Download the migration script, then run it with Python 3.9 or newer:
+## Existing local work
 
-```bash
-migration_script="$(mktemp -t smart-factory-migration)"
-curl --fail --location --proto '=https' --tlsv1.2 \
-  https://raw.githubusercontent.com/DruHustle/smart-factory-frontend/main/scripts/migrate-smart-factory.py \
-  --output "$migration_script"
-python3 "$migration_script" --apply --sync
-```
+The earlier Mac workspace at
+`/Users/andrewgotora/Software Development/GitHub/smart-factory` contained three
+independent Git repositories. Preserve those checkouts, their branches, local
+changes, ignored configuration and worktrees until their work has been reconciled
+with the canonical repository. Do not clone over an occupied directory or reset,
+clean or delete a checkout to match the current layout.
 
-Omit `--apply` to preview the plan. Use `--github-dir '/absolute/GitHub/path'`
-for a different workspace parent. The script identifies each checkout by its
-GitHub origin rather than assuming its current directory name is correct.
-
-It moves complete directories, retaining branches, staged and unstaged changes,
-untracked files, ignored `.env` files and dependencies. Git worktree links are
-repaired. Origin fetch and explicit push URLs are renamed, retaining SSH or HTTPS.
-Missing components are cloned; `--no-clone` disables that step. Existing checkouts
-are never reset, cleaned, stashed or deleted. Duplicate checkouts and occupied
-destinations stop the migration before any move.
-
-The script writes `smart-factory.code-workspace` in the parent and records directory
-moves in a private migration journal. Failed directory moves are reversed where
-possible; retained staging files and their paths are reported for review.
-`--sync` fast-forwards only clean checkouts on their default branch. Changed
-checkouts and feature branches retain their current code and need their usual
-review/merge before receiving the naming changes. Re-running the script is safe.
+The retained [`migrate-smart-factory.py`](../scripts/migrate-smart-factory.py)
+script belongs to that historical separate-repository layout. Its origin mapping,
+clone behavior and synchronization rules refer to the old repositories; it does
+not migrate Git history into the canonical repository and is not an ongoing
+setup or deployment command after their retirement. The implementation and its
+existing fixture tests remain available for reviewing or recovering the prior
+local migration, with their original source identities intact.
 
 ## Existing deployed resource identities
 
-Repository and product naming changes do not migrate a running database, Docker
-volume, JWT issuer/audience, Pi state directory, or hosting domain. These identifiers
-remain compatible with existing data and services. In particular, the current
-Vercel URL still contains the former name. Historical deployment manifests and
-qualification logs preserve the identities they actually recorded.
+Repository consolidation does not migrate a running database, Docker volume, JWT
+issuer or audience, Pi state directory, hosting domain or commissioned device.
+Keep those identifiers compatible with existing data and services. Historical
+deployment manifests and qualification logs preserve the identities they
+actually recorded.
 
-New UI titles, reports, email display names, package identity, AutomationML download
-names, repository links and sibling-source references use Smart Factory. Before
-changing persistent resource identifiers, coordinate their data/configuration
-migration and verify the deployed API and worker together.
-
-## Verify
-
-```bash
-python3 scripts/migrate-smart-factory.py --github-dir '/Users/andrewgotora/Software Development/GitHub'
-python3 -m unittest discover -s scripts/tests -p 'test_smart_factory_migration.py' -v
-```
-
-The first command should show every component already in its canonical location.
-The tests use disposable repositories and cover dirty files, ignored settings,
-duplicate/conflicting checkouts, SSH push URLs, linked worktrees and rollback.
+New source links use the retained canonical repository and component paths.
+Changing persistent resource identities requires its own data/configuration
+migration and verification of the deployed API and worker together.
