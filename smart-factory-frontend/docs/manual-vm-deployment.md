@@ -1,11 +1,14 @@
 # Manual VM release from the reviewed source package
 
-For the canonical multi-repository Smart Factory workspace, start with the
-[manual deployment commands](../scripts/manual-deployment/README.md). The active
-launchers live in `local-tools/manual deployment/`. They keep source preparation, fixture locks,
-logs and receipts inside the workspace, support offline plans from any working
-directory, and reuse the qualification/deployment engines described below.
-They also cover the gated Vercel release, edge packaging and release verification.
+For the canonical `DruHustle/smart-factory` checkout, start with the
+[root release runbook](../../docs/consolidated-release.md). It selects canonical
+qualification evidence and exact API/worker artifacts before the controlled
+frontend cutover. Keep its installed-baseline, rollback and source checks intact.
+
+The [legacy component launchers](../scripts/manual-deployment/README.md) under
+`local-tools/manual deployment/` apply only to existing separate component Git
+checkouts. They preserve local source preparation, fixture locks, logs and
+receipts, but their old-repository workflow contract is not the canonical one.
 
 The standalone downloadable installer described below remains a supported private
 source-delivery option; it is not needed by the workspace launchers.
