@@ -64,7 +64,10 @@ Rollback retains additive data. It must not drop operations records or reinterpr
 
 ## Promotion boundary
 
-Use the existing [manual deployment commands](../scripts/manual-deployment/README.md) and [Oracle runbook](../deploy/oracle/README.md). The order remains:
+Use the [canonical release runbook](../../docs/consolidated-release.md) and
+[Oracle runbook](../deploy/oracle/README.md). Legacy component launchers apply only
+to separately retained component Git checkouts; do not use their old-repository
+dispatch contract for the canonical source. The order remains:
 
 1. Qualify and retain the exact immutable candidate and compatible fallback, including native ARM64 rollback tests.
 2. Deploy the Oracle API and singleton worker, applying additive migrations.

@@ -33,4 +33,4 @@ The Assistant indexes only the explicitly listed Markdown guides in `server/assi
 
 Browser-local editable demo snapshots supplied to the Assistant stay in its local response path and are not sent to external providers. [Factory layouts](docs/factory-layouts.md), [FX/TSN reports](docs/fx-tsn.md), [editable demo boundaries](docs/editable-demo.md) and [digital passports](docs/access-and-publication.md) describe these workflows in detail.
 
-See [API flows](docs/api-flows.md), [authorization and AAS](docs/authorization-and-aas.md), and [.NET API contract](https://github.com/DruHustle/smart-factory-backend/blob/main/API-SPEC.md).
+See [API flows](docs/api-flows.md), [authorization and AAS](docs/authorization-and-aas.md), and [.NET API contract](../smart-factory-backend/API-SPEC.md).

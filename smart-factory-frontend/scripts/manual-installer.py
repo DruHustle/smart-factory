@@ -15,7 +15,7 @@ manual VM deployment helper. --status only observes the saved deployment job.
 
 Python 3.9+ is required. Preparation needs native Apple Silicon or Linux ARM64,
 Git, and a local ARM64 Docker engine with the containerd image store. The VM
-helper uses the existing ~/.ssh/id_ed25519 key and strict host-key checking.
+helper uses the existing OpenSSH identity configuration and strict host-key checking.
 No source or image is published. The frontend and gateways are not deployed.
 """
 import argparse

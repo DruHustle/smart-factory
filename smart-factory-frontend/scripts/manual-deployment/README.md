@@ -1,6 +1,20 @@
-# Smart Factory manual deployment
+# Legacy Smart Factory component deployment
 
-`local-tools/manual deployment/` is the entry point. The physical `local-tools`
+These launchers support the original three separate component Git checkouts.
+They retain the old repository identities, CI selection and workflow input
+contracts for existing installations and recovery. For the canonical
+`DruHustle/smart-factory` checkout, use the [root release runbook](../../../docs/consolidated-release.md):
+its qualification, API artifact preparation and controlled frontend dispatch have
+different source and rollback requirements. Changing only the repository slug
+does not adapt this launcher.
+
+The installer validates the selected component Git roots before writing any
+launcher or configuration. A consolidated checkout is rejected with the canonical
+runbook location. Existing installed launchers and separate checkouts are not
+changed by this clarification; inventory their actual use and freeze old deployment
+producers only through the reviewed retirement procedure.
+
+For a verified legacy workspace, `local-tools/manual deployment/` is the entry point. The physical `local-tools`
 directory also contains release evidence under `local-tools/deployment-evidence`.
 All paths below preserve the space.
 
@@ -20,7 +34,7 @@ packaging. Frontend qualification pins must match backend and edge commits.
 
 For qualification: native ARM64 Docker with the containerd image store, Buildx,
 Compose, 12 GiB free local space and the repository's documented dependencies.
-For deployment: the existing `~/.ssh/id_ed25519` identity, an owner-provided
+For deployment: the existing OpenSSH identity configured for an owner-provided
 SSH destination with a trusted known-host entry, and noninteractive sudo;
 GitHub CLI authentication for frontend dispatch; Vercel credentials stay in the
 existing GitHub production environment. Do not put secrets in CLI arguments.
@@ -32,8 +46,13 @@ with optional `SMART_FACTORY_SSH_TARGET`, `SMART_FACTORY_API_ORIGIN` and
 `ubuntu@152.70.22.84`, the existing Oracle API and the Vercel UI. Setting an API
 origin alone does not change the SSH destination. Supply one owner-provided
 `user@host` or SSH alias; use a reviewed alias for a custom port or IPv6.
-Inline ports, URLs, shell options and whitespace are rejected. Strict host-key
-checking and the existing identity remain mandatory. These tools require a
+Inline ports, URLs, shell options and whitespace are rejected. Alias routing
+and `IdentityFile` settings remain under the owner's OpenSSH configuration;
+the tools do not force a separate `~/.ssh/id_ed25519` file. A dedicated local
+identity can be selected with `SMART_FACTORY_SSH_IDENTITY`; the maintained
+`deploy-vm.py` also accepts `--ssh-identity`. Strict host-key checking,
+noninteractive public-key authentication and configured identities remain
+mandatory. These tools require a
 prepared healthy ARM64 deployment; they do not provision or discover a VM.
 
 Use the same selected SSH target and origins for backend deployment, status and

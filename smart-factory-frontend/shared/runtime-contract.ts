@@ -31,6 +31,7 @@ export const requiredCapabilities = [
 ] as const;
 /** Additive features may be hidden when the compatible rollback API lacks them. */
 export const optionalCapabilities = [
+  "node-red-package-management-v1",
   "assistant-provider-selection-v1",
   "ot-incident-review-v1",
   "ot-follow-up-actions-v1",

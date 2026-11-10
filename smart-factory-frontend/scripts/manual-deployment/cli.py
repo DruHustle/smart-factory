@@ -159,7 +159,12 @@ def repositories(base):
     for name in COMPONENTS:
         path = base / ("smart-factory-" + name)
         require(path.is_dir(), "Missing repository: " + str(path))
-        require(Path(git(path, "rev-parse", "--show-toplevel")).resolve() == path.resolve(),
+        git_root = Path(git(path, "rev-parse", "--show-toplevel")).resolve()
+        require(git_root != base.resolve(),
+                "These components share one Git root. This legacy launcher requires separate original component checkouts. "
+                "Use " + str(base / "docs/consolidated-release.md")
+                + " for canonical source qualification, API preparation and controlled frontend cutover.")
+        require(git_root == path.resolve(),
                 "Expected a separate component Git root: " + str(path))
         remote = git(path, "remote", "get-url", "origin")
         allowed = (f"https://github.com/DruHustle/smart-factory-{name}.git",

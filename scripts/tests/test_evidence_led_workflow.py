@@ -60,7 +60,7 @@ class EvidenceLedWorkflowTests(unittest.TestCase):
         for flow in self.workflows():
             self.assertEqual(flow['permissions'], {'contents': 'read'})
             job = flow['jobs']['workspace-browser']
-            self.assertEqual(job['timeout-minutes'], 15)
+            self.assertEqual(job['timeout-minutes'], 25)
             self.assertIs(job['strategy']['fail-fast'], False)
             self.assertEqual(job['strategy']['max-parallel'], 2)
             for key in ('if', 'continue-on-error', 'environment'):
