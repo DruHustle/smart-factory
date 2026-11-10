@@ -2,7 +2,7 @@ import { FactorySelector } from "@/components/workspace/FactorySelector";
 import { useRuntimeCapability } from "@/components/RuntimeBoundary";
 import { FactoryWorkspace } from "@/components/workspace/FactoryWorkspace";
 import { useFactorySelection } from "@/lib/factory-selection";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import {
   ArrowRight,
@@ -27,19 +27,11 @@ import {
   SampleTime,
 } from "@/components/workspace/Primitives";
 import { FactoryFloor } from "@/components/workspace/FactoryFloor";
-import { ObservationTrend } from "@/components/workspace/ObservationTrend";
-import { OverviewInfrastructure } from "@/components/workspace/OverviewInfrastructure";
-import { SystemItemTypes } from "@/components/workspace/SystemInventoryOverview";
-import { metrics, type Metric } from "@shared/measurements";
 import type { FloorLink } from "@shared/factory-floor";
 import { OperationsWorkspace } from "@/components/operations/OperationsWorkspace";
 import { TimeZoneDialog } from "@/components/operations/OperationsPanel";
 import { DashboardTimeZone } from "@/components/workspace/DashboardTimeZone";
 import { operationScenarios, type OperationScenario } from "@shared/operations";
-import {
-  ALL_ASSET_OBSERVATIONS,
-  selectOverviewObservationSource,
-} from "@/lib/overview-observations";
 
 export default function Home() {
   const { id } = useFactorySelection();
@@ -107,7 +99,6 @@ function LegacyHome({ timezoneAction }: { timezoneAction?: ReactNode }) {
   const active = useDocumentActive(),
     { user } = useAuth();
   const [location, navigate] = useWorkspaceLocation(),
-    [anchor, setAnchor] = useState(() => Date.now()),
     [actionPage, setActionPage] = useState(0);
   const params = new URLSearchParams(location.split("?")[1] ?? "");
   const update = (values: Record<string, string>) => {
@@ -144,36 +135,11 @@ function LegacyHome({ timezoneAction }: { timezoneAction?: ReactNode }) {
     { scenario: "normal" },
     options,
   );
-  const showcase = trpc.system.showcase.useQuery(undefined, {
-    staleTime: 300000,
-  });
   const items = floor.data?.items ?? [],
     stats = overview.data;
   const demo = !!user?.access?.demoOnly;
   const selected = items.find((item) => item.ref === params.get("source"));
-  const metric = metrics.includes(params.get("metric") as Metric)
-    ? (params.get("metric") as Metric)
-    : "temperature";
   const rangeMs = params.get("range") === "24h" ? 86400000 : 3600000;
-  const at = Number(params.get("at"));
-  const end =
-    params.has("at") && at > 0 && at <= Date.now() + 300000
-      ? at
-      : demo && showcase.data
-        ? Date.parse(showcase.data.anchor)
-        : anchor;
-  const observations = selectOverviewObservationSource(
-    items,
-    metric,
-    params.get("observationSource"),
-  );
-  const pinnedWindow = params.has("at") && at > 0 && at <= Date.now() + 300000;
-  useEffect(() => {
-    if (!active || demo || pinnedWindow) return;
-    setAnchor(Date.now());
-    const timer = window.setInterval(() => setAnchor(Date.now()), 60000);
-    return () => window.clearInterval(timer);
-  }, [active, demo, pinnedWindow]);
   const snapshots = network.data?.snapshots ?? [],
     components = snapshots.flatMap((s) => s.components),
     connections = snapshots.flatMap((s) => s.connections),
@@ -205,7 +171,6 @@ function LegacyHome({ timezoneAction }: { timezoneAction?: ReactNode }) {
   const coverage = network.data?.coverage;
   const busy = floor.isFetching || overview.isFetching;
   const refresh = () => {
-    setAnchor(Date.now());
     void Promise.all([
       floor.refetch(),
       overview.refetch(),
@@ -572,87 +537,13 @@ function LegacyHome({ timezoneAction }: { timezoneAction?: ReactNode }) {
               onSelect={(ref) => update({ source: ref })}
               returnTo={location}
               demo={demo}
+              insightsRangeMs={rangeMs}
+              onInsightsRangeChange={(value) => update({ range: value === 86400000 ? "24h" : "1h" })}
             />
           )}
         </div>
       </div>
       <OperationsWorkspace compact />
-      <div className="overview-bottom-grid grid min-w-0 items-stretch gap-3 lg:grid-cols-2 xl:grid-cols-[minmax(0,2.15fr)_minmax(14rem,1fr)_minmax(13rem,.9fr)]">
-        <div className="overview-telemetry min-w-0 lg:col-span-2 xl:col-span-1">
-          {observations.value ? (
-            <ObservationTrend
-              dashboard
-              title="Factory observations"
-              {...observations.input}
-              sourceLabel={`Source: ${observations.label}${observations.source ? "" : " · asset observations only"}`}
-              sourceControl={
-                <label className="overview-observation-source flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                  <span className="shrink-0">Source</span>
-                  <select
-                    aria-label="Overview observation source"
-                    className="workspace-control min-w-0 w-full"
-                    value={observations.selection}
-                    onChange={(event) =>
-                      update({ observationSource: event.target.value })
-                    }
-                  >
-                    <option value="auto">Choose automatically</option>
-                    {observations.aggregateAvailable && (
-                      <option value={ALL_ASSET_OBSERVATIONS}>
-                        All registered assets
-                      </option>
-                    )}
-                    {observations.sources.map((source) => (
-                      <option key={source.ref} value={source.ref}>
-                        {source.name}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              }
-              metric={metric}
-              onMetricChange={(value) => update({ metric: value })}
-              scope={demo ? "simulated" : "operational"}
-              startTime={end - rangeMs}
-              endTime={end}
-              intervalMs={rangeMs === 86400000 ? 900000 : 60000}
-              openHref="/analytics"
-            />
-          ) : (
-            <Card className="overview-panel h-full">
-              <CardHeader>
-                <CardTitle>Factory observations</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <EmptyState
-                  title={
-                    observations.assetIds.length > 1000
-                      ? "Select a zone in Analytics for detailed comparisons"
-                      : "No factory observations yet"
-                  }
-                  description="Connected equipment will contribute measurements to the factory trend."
-                />
-              </CardContent>
-            </Card>
-          )}
-        </div>
-        <Card className="overview-panel overview-inventory min-w-0">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Boxes className="size-4 text-info" aria-hidden />
-              Factory inventory
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {floor.data && !floor.error ? (
-              <SystemItemTypes groups={floor.data.groups} />
-            ) : (
-              <EmptyState title="Inventory summary unavailable" />
-            )}
-          </CardContent>
-        </Card>
-        <OverviewInfrastructure />
-      </div>
       <details className="rounded-lg border bg-card px-4 py-2 text-xs">
         <summary className="cursor-pointer font-medium">
           Process and FX / TSN evidence
