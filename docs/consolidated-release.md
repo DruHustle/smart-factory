@@ -92,7 +92,13 @@ python3 smart-factory-frontend/scripts/deploy-vm.py --check \
 ```
 
 The selected SSH alias retains its private route and configured identity. The
-helper does not require an Ed25519 key when the workstation already uses another
+SSH target, API origin and UI origin are all required, either as explicit flags
+or their corresponding `SMART_FACTORY_*` environment settings. Missing values
+stop before network access. This also applies when reconnecting with `--status`;
+the installer never silently selects the former Software Engineering Backend.
+Historical receipts keep their original target binding.
+
+The helper does not require an Ed25519 key when the workstation already uses another
 authorized identity. For a separate local key file, pass `--ssh-identity` or set
 `SMART_FACTORY_SSH_IDENTITY`; the key is used locally for SSH/SCP and is never
 uploaded to the VM.

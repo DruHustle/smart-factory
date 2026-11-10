@@ -18,6 +18,17 @@ source changes for all three repositories. It prepares and qualifies a native
 ARM64 candidate and an independent connectivity-aware fallback on your own
 machine before an explicit deployment to `ubuntu@152.70.22.84`.
 
+Each frozen package is bound to the installation shown by `--inspect`. The
+operator must select that exact SSH target, API origin and UI origin through
+`--ssh-target`, `--api-origin`, `--ui-origin` or the corresponding
+`SMART_FACTORY_*` environment settings before `--deploy` or `--status`.
+Missing or different values stop before payload loading or workspace access.
+The wrapper forwards the validated pinned target explicitly to the core helper;
+ambient variables cannot silently redirect a packaged release.
+Use the canonical release runbook with an explicitly selected target for the
+Onesa migration. This historical package does not relocate an installation or
+select a replacement VM.
+
 The installer template is [manual-installer.py](../scripts/manual-installer.py).
 The source-package plan records immutable commits and Git-bundle checksums; the
 downloadable release embeds that plan and those bundles. This is a private source
@@ -75,6 +86,10 @@ Save the downloaded installer in Downloads, then run:
 ```bash
 python3 "$HOME/Downloads/smart_factory_deploy_vm.py" --inspect
 python3 "$HOME/Downloads/smart_factory_deploy_vm.py" --check
+# Supply the exact target values reviewed in --inspect before deploy or status.
+export SMART_FACTORY_SSH_TARGET="$REVIEWED_PACKAGE_SSH_TARGET"
+export SMART_FACTORY_API_ORIGIN="$REVIEWED_PACKAGE_API_ORIGIN"
+export SMART_FACTORY_UI_ORIGIN="$REVIEWED_PACKAGE_UI_ORIGIN"
 python3 "$HOME/Downloads/smart_factory_deploy_vm.py" --deploy
 ```
 

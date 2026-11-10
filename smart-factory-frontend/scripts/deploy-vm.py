@@ -6,6 +6,8 @@
   python3 deploy-vm.py --status
 
 The default is a read-only preflight. Only --deploy starts a detached deployment.
+Every invocation requires an explicit SSH target, API origin and UI origin,
+through the corresponding flags or SMART_FACTORY_* environment settings.
 Use --manifest for a reviewed release manifest when none is embedded. Startup
 applies the qualified additive migrations. The helper does not seed records,
 change accounts, deploy gateways, publish the frontend, or change infrastructure.
@@ -39,6 +41,8 @@ import zipfile
 # Release preparation supplies this only after exact-source native ARM64 qualification.
 RELEASE_MANIFEST = None
 M = None
+# Historical values are retained only for old receipt validation and pure helpers.
+# The command line must never select the former VM or domains implicitly.
 DEFAULT_SSH_TARGET = "ubuntu@152.70.22.84"
 HOST = DEFAULT_SSH_TARGET
 SSH_IDENTITY = None
@@ -1577,19 +1581,25 @@ def main(argv=None):
     parser.add_argument("--bundle", help="Exact qualified ARM64 ZIP from the completed qualification.")
     parser.add_argument("--manifest", help="Reviewed release manifest, if it is not embedded in this file.")
     parser.add_argument("--state", help="Private local receipt path for reconnecting to the same release.")
-    parser.add_argument("--ssh-target", default=os.environ.get("SMART_FACTORY_SSH_TARGET", DEFAULT_SSH_TARGET),
-                        help="Explicit user@host or owner-configured SSH alias; preserved in the deployment receipt.")
+    parser.add_argument("--ssh-target", default=os.environ.get("SMART_FACTORY_SSH_TARGET"),
+                        help="Required explicit user@host or owner-configured SSH alias, or SMART_FACTORY_SSH_TARGET; preserved in the deployment receipt.")
     parser.add_argument("--ssh-identity", help="Optional local identity file for SSH and SCP; otherwise use SMART_FACTORY_SSH_IDENTITY or OpenSSH configuration.")
-    parser.add_argument("--api-origin", default=os.environ.get("SMART_FACTORY_API_ORIGIN", DEFAULT_API_ORIGIN),
-                        help="Canonical public HTTPS API origin; preserved in the deployment receipt.")
-    parser.add_argument("--ui-origin", default=os.environ.get("SMART_FACTORY_UI_ORIGIN", DEFAULT_UI_ORIGIN),
-                        help="Canonical HTTPS frontend and password-reset origin; preserved in the deployment receipt.")
+    parser.add_argument("--api-origin", default=os.environ.get("SMART_FACTORY_API_ORIGIN"),
+                        help="Required canonical public HTTPS API origin, or SMART_FACTORY_API_ORIGIN; preserved in the deployment receipt.")
+    parser.add_argument("--ui-origin", default=os.environ.get("SMART_FACTORY_UI_ORIGIN"),
+                        help="Required canonical HTTPS frontend and password-reset origin, or SMART_FACTORY_UI_ORIGIN; preserved in the deployment receipt.")
     parser.add_argument("--remote-mode", choices=("check", "allocate", "start", "run", "status"), help=argparse.SUPPRESS)
     parser.add_argument("--directory", help=argparse.SUPPRESS)
     parser.add_argument("--helper-sha", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     try:
         require(sys.version_info >= (3, 9), "Python 3.9 or newer is required.")
+        for option, value, environment in (
+                ("--ssh-target", args.ssh_target, "SMART_FACTORY_SSH_TARGET"),
+                ("--api-origin", args.api_origin, "SMART_FACTORY_API_ORIGIN"),
+                ("--ui-origin", args.ui_origin, "SMART_FACTORY_UI_ORIGIN")):
+            require(isinstance(value, str) and bool(value.strip()),
+                    "Select " + option + " or " + environment + "; no deployment target is assumed.")
         configure_ssh_target(args.ssh_target)
         configure_origins(args.api_origin, args.ui_origin)
         if args.remote_mode:
