@@ -30,6 +30,9 @@ env_spec.loader.exec_module(oracle_env)
 
 CAPABILITIES = ["password-reset-v1", "account-requests-v1", "account-role-approval-v1",
                 "industrial-connectivity-v1", "published-passports-v1"]
+TARGET_ENV = {"SMART_FACTORY_SSH_TARGET": "onesa-oracle",
+              "SMART_FACTORY_API_ORIGIN": "https://factory-api.onesa.eu",
+              "SMART_FACTORY_UI_ORIGIN": "https://factory.onesa.eu"}
 
 
 def encoded(value):
@@ -242,10 +245,40 @@ class BundleTests(unittest.TestCase):
 
 class ConfigurationTests(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, TARGET_ENV)
+        environment.start()
+        self.addCleanup(environment.stop)
         vm.configure_origins()
         vm.configure_ssh_target()
         self.addCleanup(vm.configure_origins)
         self.addCleanup(vm.configure_ssh_target)
+
+    def test_each_missing_target_stops_before_manifest_or_network_access(self):
+        for missing in (None, *TARGET_ENV):
+            environment = {key: value for key, value in TARGET_ENV.items() if missing and key != missing}
+            with self.subTest(missing=missing), patch.dict(os.environ, environment, clear=True), \
+                 patch.object(vm, "validate_manifest") as manifest, \
+                 patch.object(vm, "run_client") as client, \
+                 patch.object(vm, "remote_check") as remote, contextlib.redirect_stderr(io.StringIO()):
+                for mode in ([], ["--deploy"], ["--status"], ["--remote-mode", "check"]):
+                    self.assertEqual(vm.main(mode), 1)
+                manifest.assert_not_called()
+                client.assert_not_called()
+                remote.assert_not_called()
+
+    def test_explicit_target_overrides_environment_without_changing_legacy_receipts(self):
+        with patch.object(vm, "validate_manifest", return_value={}), \
+             patch.object(vm, "run_client", return_value=0) as client:
+            self.assertEqual(vm.main(["--ssh-target", "factory-owner@reviewed-host",
+                "--api-origin", "https://reviewed-api.example", "--ui-origin", "https://reviewed-ui.example"]), 0)
+        client.assert_called_once()
+        self.assertEqual(vm.deployment_target(), {"sshTarget": "factory-owner@reviewed-host",
+            "origins": {"api": "https://reviewed-api.example", "ui": "https://reviewed-ui.example"}})
+        with self.assertRaisesRegex(RuntimeError, "different origins"):
+            vm.assert_receipt_target({})
+        vm.configure_ssh_target()
+        vm.configure_origins()
+        vm.assert_receipt_target({})
 
     def test_custom_origins_are_validated_and_do_not_inherit_the_legacy_alias(self):
         vm.configure_origins("https://api.onesa.eu/", "https://factory.onesa.eu/")
@@ -725,6 +758,9 @@ class EnvironmentPreparationTests(unittest.TestCase):
 
 class DetachedAndTransportTests(unittest.TestCase):
     def setUp(self):
+        environment = patch.dict(os.environ, TARGET_ENV)
+        environment.start()
+        self.addCleanup(environment.stop)
         vm.configure_origins()
         vm.configure_ssh_target()
         vm.configure_ssh_identity()

@@ -5,23 +5,23 @@
   "rewrites": [
     {
       "source": "/health/live",
-      "destination": "https://api.152-70-22-84.sslip.io/health/live"
+      "destination": "https://factory-api.onesa.eu/health/live"
     },
     {
       "source": "/health/ready",
-      "destination": "https://api.152-70-22-84.sslip.io/health/ready"
+      "destination": "https://factory-api.onesa.eu/health/ready"
     },
     {
       "source": "/api/health/live",
-      "destination": "https://api.152-70-22-84.sslip.io/health/live"
+      "destination": "https://factory-api.onesa.eu/health/live"
     },
     {
       "source": "/api/health/ready",
-      "destination": "https://api.152-70-22-84.sslip.io/health/ready"
+      "destination": "https://factory-api.onesa.eu/health/ready"
     },
     {
       "source": "/api/:path*",
-      "destination": "https://api.152-70-22-84.sslip.io/api/:path*"
+      "destination": "https://factory-api.onesa.eu/api/:path*"
     },
     {
       "source": "/:path*",

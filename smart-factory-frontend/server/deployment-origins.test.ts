@@ -82,12 +82,45 @@ describe("configured Vercel and verification origins", () => {
     expect(actual).toEqual(original);
   });
 
-  it("retains the existing legacy API configuration input", () => {
+  it("retains the canonical API configuration in the tracked deployment", () => {
+    const result = configureProxy({
+      API_ORIGIN: "https://factory-api.onesa.eu",
+    });
+    expect(result.status, result.stderr).toBe(0);
+    expect(result.config).toEqual(JSON.parse(fixture));
+  });
+
+  it("retains the existing legacy API configuration input when explicitly selected", () => {
     const result = configureProxy({
       RENDER_API_ORIGIN: "https://api.152-70-22-84.sslip.io",
     });
     expect(result.status, result.stderr).toBe(0);
-    expect(result.config).toEqual(JSON.parse(fixture));
+    expect(result.config).toEqual({
+      ...JSON.parse(fixture),
+      rewrites: [
+        {
+          source: "/health/live",
+          destination: "https://api.152-70-22-84.sslip.io/health/live",
+        },
+        {
+          source: "/health/ready",
+          destination: "https://api.152-70-22-84.sslip.io/health/ready",
+        },
+        {
+          source: "/api/health/live",
+          destination: "https://api.152-70-22-84.sslip.io/health/live",
+        },
+        {
+          source: "/api/health/ready",
+          destination: "https://api.152-70-22-84.sslip.io/health/ready",
+        },
+        {
+          source: "/api/:path*",
+          destination: "https://api.152-70-22-84.sslip.io/api/:path*",
+        },
+        { source: "/:path*", destination: "/index.html" },
+      ],
+    });
   });
 
   it.each([
