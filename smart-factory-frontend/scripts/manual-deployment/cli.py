@@ -533,12 +533,12 @@ def parser():
     modes.add_argument("--execute", action="store_true", help="Perform the requested action; backend/frontend/all require release authorization for this exact candidate.")
     p.add_argument("--source-root", help="Workspace-contained parent of the three component checkouts; see config.json.")
     p.add_argument("--release-dir", help="Persistent release directory under local-tools/deployment-evidence; reuse for status/recovery.")
-    p.add_argument("--ssh-target", default=os.environ.get("SMART_FACTORY_SSH_TARGET", DEFAULT_SSH_TARGET),
-                   help="Explicit user@host or owner-configured SSH alias for backend deployment and reconnect.")
-    p.add_argument("--api-origin", default=os.environ.get("SMART_FACTORY_API_ORIGIN", DEFAULT_API),
-                   help="Canonical HTTPS API origin; must match the production workflow configuration.")
-    p.add_argument("--ui-origin", default=os.environ.get("SMART_FACTORY_UI_ORIGIN", DEFAULT_UI),
-                   help="Canonical HTTPS frontend origin; must match the production workflow configuration.")
+    p.add_argument("--ssh-target", default=os.environ.get("SMART_FACTORY_SSH_TARGET"),
+                   help="Required explicit user@host or owner-configured SSH alias, or SMART_FACTORY_SSH_TARGET.")
+    p.add_argument("--api-origin", default=os.environ.get("SMART_FACTORY_API_ORIGIN"),
+                   help="Required canonical HTTPS API origin, or SMART_FACTORY_API_ORIGIN; must match the production workflow configuration.")
+    p.add_argument("--ui-origin", default=os.environ.get("SMART_FACTORY_UI_ORIGIN"),
+                   help="Required canonical HTTPS frontend origin, or SMART_FACTORY_UI_ORIGIN; must match the production workflow configuration.")
     p.add_argument("--manifest")
     p.add_argument("--bundle")
     p.add_argument("--baseline")
@@ -555,6 +555,12 @@ def main(argv=None):
     session = None
     try:
         require(sys.version_info >= (3, 9), "Python 3.9 or newer is required.")
+        for option, value, environment in (
+                ("--ssh-target", args.ssh_target, "SMART_FACTORY_SSH_TARGET"),
+                ("--api-origin", args.api_origin, "SMART_FACTORY_API_ORIGIN"),
+                ("--ui-origin", args.ui_origin, "SMART_FACTORY_UI_ORIGIN")):
+            require(isinstance(value, str) and bool(value.strip()),
+                    "Select " + option + " or " + environment + "; no deployment target is assumed.")
         configure_ssh_target(args.ssh_target)
         configure_origins(args.api_origin, args.ui_origin)
         sources = repositories(source_root(args.source_root))

@@ -65,6 +65,12 @@ def archive_bytes(entries):
 
 class InstallerTest(unittest.TestCase):
     def setUp(self):
+        self.target_environment = {"SMART_FACTORY_SSH_TARGET": installer.TARGET["host"],
+                                   "SMART_FACTORY_API_ORIGIN": installer.TARGET["api"],
+                                   "SMART_FACTORY_UI_ORIGIN": installer.TARGET["frontend"]}
+        environment = patch.dict(os.environ, self.target_environment)
+        environment.start()
+        self.addCleanup(environment.stop)
         self.original_umask = os.umask(0o077)
         self.temporary = tempfile.TemporaryDirectory()
         self.root = Path(self.temporary.name)
@@ -321,6 +327,28 @@ class ExtractionTests(InstallerTest):
 
 
 class LifecycleTests(InstallerTest):
+    def test_deploy_and_status_require_each_explicit_target_before_loading_or_writing(self):
+        for missing in (None, *self.target_environment):
+            environment = {key: value for key, value in self.target_environment.items() if missing and key != missing}
+            with self.subTest(missing=missing), patch.dict(os.environ, environment, clear=True), \
+                 patch.object(installer, "read_payload") as payload, patch.object(installer, "work_path") as workspace, \
+                 patch.object(installer, "run_child") as child:
+                for mode in ("--deploy", "--status"):
+                    self.assertEqual(self.call_main(mode), 1)
+                payload.assert_not_called()
+                workspace.assert_not_called()
+                child.assert_not_called()
+
+    def test_frozen_package_refuses_a_different_selected_host_or_origin(self):
+        for key in self.target_environment:
+            environment = {**self.target_environment, key: "different-host" if key.endswith("TARGET") else "https://different.example"}
+            with self.subTest(setting=key), patch.dict(os.environ, environment, clear=True), \
+                 patch.object(installer, "read_payload") as payload, patch.object(installer, "run_child") as child:
+                for mode in ("--deploy", "--status"):
+                    self.assertEqual(self.call_main(mode), 1)
+                payload.assert_not_called()
+                child.assert_not_called()
+
     def test_check_invokes_local_preflight_only(self):
         with patch.object(installer, "run_child", return_value=0) as child:
             self.assertEqual(self.call_main("--check"), 0)
@@ -361,13 +389,19 @@ class LifecycleTests(InstallerTest):
     def test_deploy_reuses_exact_qualification_and_preserves_failure_exit_code(self):
         self.initialized()
         self.qualified()
-        with patch.object(installer, "run_child", return_value=1) as child:
-            self.assertEqual(self.call_main("--deploy"), 1)
+        with patch.object(installer, "run_child", return_value=1) as child, \
+             patch.dict(os.environ, {"SMART_FACTORY_SSH_TARGET": "different-host",
+                 "SMART_FACTORY_API_ORIGIN": "https://different-api.example",
+                 "SMART_FACTORY_UI_ORIGIN": "https://different-ui.example"}):
+            self.assertEqual(self.call_main("--deploy", "--ssh-target", installer.TARGET["host"],
+                "--api-origin", installer.TARGET["api"], "--ui-origin", installer.TARGET["frontend"]), 1)
         self.assertEqual(child.call_count, 1)
         arguments = child.call_args.args[0]
         self.assertEqual(Path(arguments[0]).name, "deploy-vm.py")
         self.assertIn("--deploy", arguments)
         self.assertIn(self.base / "vm-deployment.json", arguments)
+        self.assertEqual(arguments[-6:], ["--ssh-target", installer.TARGET["host"],
+            "--api-origin", installer.TARGET["api"], "--ui-origin", installer.TARGET["frontend"]])
         self.assertEqual((self.base / "deployment-manifest.json").read_bytes(),
                          (self.base / "qualification/release-manifest.json").read_bytes())
         self.assertEqual(stat.S_IMODE((self.base / "deployment-manifest.json").stat().st_mode), 0o600)
@@ -447,6 +481,9 @@ class LifecycleTests(InstallerTest):
         self.assertEqual(Path(arguments[0]).name, "deploy-vm.py")
         self.assertIn("--status", arguments)
         self.assertIn("--once", arguments)
+        self.assertEqual(arguments[arguments.index("--ssh-target") + 1], installer.TARGET["host"])
+        self.assertEqual(arguments[arguments.index("--api-origin") + 1], installer.TARGET["api"])
+        self.assertEqual(arguments[arguments.index("--ui-origin") + 1], installer.TARGET["frontend"])
         self.assertNotIn("--bundle", arguments)
         self.assertNotIn("--deploy", arguments)
 

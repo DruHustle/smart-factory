@@ -24,6 +24,12 @@ prep_spec.loader.exec_module(prepare)
 
 class WorkspaceCliTests(unittest.TestCase):
     def setUp(self):
+        self.target_environment = {"SMART_FACTORY_SSH_TARGET": "onesa-oracle",
+                                   "SMART_FACTORY_API_ORIGIN": "https://factory-api.onesa.eu",
+                                   "SMART_FACTORY_UI_ORIGIN": "https://factory.onesa.eu"}
+        environment = patch.dict(os.environ, self.target_environment)
+        environment.start()
+        self.addCleanup(environment.stop)
         cli.configure_origins()
         cli.configure_ssh_target()
         self.addCleanup(cli.configure_origins)
@@ -42,6 +48,17 @@ class WorkspaceCliTests(unittest.TestCase):
     def run_main(self, *arguments):
         with patch.object(cli, "source_root", return_value=cli.ROOT), patch.object(cli, "repositories", return_value=self.sources), contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             return cli.main(list(arguments))
+
+    def test_missing_target_never_plans_or_executes_against_the_former_vm(self):
+        for missing in (None, *self.target_environment):
+            environment = {key: value for key, value in self.target_environment.items() if missing and key != missing}
+            with self.subTest(missing=missing), patch.dict(os.environ, environment, clear=True), \
+                 patch.object(cli, "source_root") as source, patch.object(cli, "get_json") as network, \
+                 contextlib.redirect_stderr(io.StringIO()):
+                for operation in (["status"], ["backend", "--execute"], ["all", "--execute"]):
+                    self.assertEqual(cli.main(operation), 1)
+                source.assert_not_called()
+                network.assert_not_called()
 
     def test_invalid_origins_stop_before_workspace_or_network_access(self):
         for value in ("http://factory.onesa.eu", "https://factory.onesa.eu/path", "https://secret@factory.onesa.eu",

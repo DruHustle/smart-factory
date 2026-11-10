@@ -41,10 +41,12 @@ existing GitHub production environment. Do not put secrets in CLI arguments.
 No new environment file is sourced by these launchers.
 
 The maintained tools accept `--ssh-target`, `--api-origin` and `--ui-origin`,
-with optional `SMART_FACTORY_SSH_TARGET`, `SMART_FACTORY_API_ORIGIN` and
-`SMART_FACTORY_UI_ORIGIN` environment defaults. Without overrides, they retain
-`ubuntu@152.70.22.84`, the existing Oracle API and the Vercel UI. Setting an API
-origin alone does not change the SSH destination. Supply one owner-provided
+with `SMART_FACTORY_SSH_TARGET`, `SMART_FACTORY_API_ORIGIN` and
+`SMART_FACTORY_UI_ORIGIN` as environment alternatives. All three selections are
+required, including offline plans and reconnects. Missing settings stop before
+workspace access or any network operation; the former VM and domains are never
+selected implicitly. Setting an API origin alone does not select an SSH
+destination. Supply one owner-provided
 `user@host` or SSH alias; use a reviewed alias for a custom port or IPv6.
 Inline ports, URLs, shell options and whitespace are rejected. Alias routing
 and `IdentityFile` settings remain under the owner's OpenSSH configuration;
@@ -57,7 +59,7 @@ prepared healthy ARM64 deployment; they do not provision or discover a VM.
 
 Use the same selected SSH target and origins for backend deployment, status and
 recovery. Local/server receipts bind them to the retained job; older receipts
-without target fields belong to the original live defaults. The offline plan
+without target fields remain bound to their original historical targets. The offline plan
 shows the selected VM and execution requests/results retain it. Frontend
 dispatch binds the origins to the GitHub production variables of the same names
 before any promotion.
@@ -70,6 +72,10 @@ SF_ROOT='/Users/andrewgotora/Software Development/GitHub/smart-factory'
 MANUAL="$SF_ROOT/local-tools/manual deployment"
 SOURCES="$SF_ROOT"
 RELEASE="$SF_ROOT/local-tools/deployment-evidence/manual-reviewed-release"
+# Set these to the reviewed installation before any command, including inventory.
+export SMART_FACTORY_SSH_TARGET="$VERIFIED_FACTORY_SSH_TARGET"
+export SMART_FACTORY_API_ORIGIN="$VERIFIED_FACTORY_API_ORIGIN"
+export SMART_FACTORY_UI_ORIGIN="$VERIFIED_FACTORY_UI_ORIGIN"
 
 python3 "$MANUAL/deploy.py" inventory
 bash "$MANUAL/deploy-all.sh" --dry-run --release-dir "$RELEASE"

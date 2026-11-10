@@ -12,6 +12,8 @@ The default, --inspect, only verifies and describes the embedded source package.
 --prepare builds and tests both native ARM64 images locally. --deploy reuses a
 fully verified local qualification, or prepares it first, before invoking the
 manual VM deployment helper. --status only observes the saved deployment job.
+Both --deploy and --status require the caller to select the exact inspected
+SSH target and origins using flags or SMART_FACTORY_* environment settings.
 
 Python 3.9+ is required. Preparation needs native Apple Silicon or Linux ARM64,
 Git, and a local ARM64 Docker engine with the containerd image store. The VM
@@ -459,7 +461,9 @@ def run_status(base, payload, once=False):
     package = base / "package"
     manifest = frozen_manifest(base, package, payload)
     arguments = [package / "scripts/deploy-vm.py", "--manifest", manifest,
-                 "--state", base / "vm-deployment.json", "--status"]
+                 "--state", base / "vm-deployment.json", "--status",
+                 "--ssh-target", TARGET["host"], "--api-origin", TARGET["api"],
+                 "--ui-origin", TARGET["frontend"]]
     if once:
         arguments.append("--once")
     return run_child(arguments)
@@ -497,7 +501,8 @@ def run_mode(mode, base, package, payload):
     elif not frozen.exists() or file_digest(regular_private(frozen, MAX_METADATA_BYTES)) != record["manifestFileSha256"]:
         write_private(frozen, manifest.read_bytes(), replace=frozen.exists())
     return run_child([package / "scripts/deploy-vm.py", "--manifest", frozen, "--bundle", bundle,
-                      "--state", receipt, "--deploy"])
+                      "--state", receipt, "--deploy", "--ssh-target", TARGET["host"],
+                      "--api-origin", TARGET["api"], "--ui-origin", TARGET["frontend"]])
 
 
 def main(argv=None):
@@ -514,11 +519,28 @@ def main(argv=None):
     parser.set_defaults(mode="inspect")
     parser.add_argument("--once", action="store_true", help="With --status, show one snapshot instead of following progress.")
     parser.add_argument("--work-dir", type=Path, help="Use this owned private directory for the package, qualification and deployment receipts.")
+    parser.add_argument("--ssh-target", default=os.environ.get("SMART_FACTORY_SSH_TARGET"),
+                        help="For deploy/status, explicitly select the SSH target shown by --inspect.")
+    parser.add_argument("--api-origin", default=os.environ.get("SMART_FACTORY_API_ORIGIN"),
+                        help="For deploy/status, explicitly select the API origin shown by --inspect.")
+    parser.add_argument("--ui-origin", default=os.environ.get("SMART_FACTORY_UI_ORIGIN"),
+                        help="For deploy/status, explicitly select the frontend origin shown by --inspect.")
     args = parser.parse_args(argv)
     os.umask(0o077)
     try:
         require(sys.version_info >= (3, 9), "Python 3.9 or newer is required.")
         require(not args.once or args.mode == "status", "--once is available only with --status.")
+        if args.mode in ("deploy", "status"):
+            for option, value, key, environment in (
+                    ("--ssh-target", args.ssh_target, "host", "SMART_FACTORY_SSH_TARGET"),
+                    ("--api-origin", args.api_origin, "api", "SMART_FACTORY_API_ORIGIN"),
+                    ("--ui-origin", args.ui_origin, "frontend", "SMART_FACTORY_UI_ORIGIN")):
+                require(isinstance(value, str) and bool(value.strip()),
+                        "Select " + option + " or " + environment + "; no deployment target is assumed.")
+                allowed = (TARGET[key],) if key == "host" else (TARGET[key], TARGET[key] + "/")
+                require(value in allowed,
+                        "The selected " + option + " differs from this frozen package's inspected target. "
+                        "Use --inspect to review it, or the canonical release procedure for another installation.")
         payload = read_payload()
         if args.mode == "inspect":
             print(json.dumps(inspect_payload(payload), indent=2), flush=True)

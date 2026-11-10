@@ -1,6 +1,6 @@
 # Oracle API and singleton worker
 
-Current maintained target: Vercel serves the React application and proxies the API to `https://api.152-70-22-84.sslip.io`. The existing Oracle ARM64 host runs the API and a separate singleton worker from the same immutable non-root image. The private BaSyx/Caddy stack remains separate. Managed PostgreSQL, Redis and MQTT retain their existing providers.
+Supported topology: Vercel serves the React application and proxies the API to the explicitly selected HTTPS origin. The Oracle ARM64 host runs the API and a separate singleton worker from the same immutable non-root image. The private BaSyx/Caddy stack remains separate. Preserve the verified PostgreSQL, Redis and MQTT providers. Historical template hostnames do not identify the current live VM; inspect the installed runtime and provider routing before deployment or retirement.
 
 The API role starts Node, Device, Identity and Analytics. The worker role starts Telemetry and Notification. Compatibility variables retain the historical names `RENDER_SERVICE_ROLE` and `BACKEND_DEPLOYMENT_MODE=render-bundle`; these do not imply Render hosting. API ports remain loopback-bound behind Caddy. Exactly one MQTT worker may use the commissioned consumer identity.
 
@@ -8,18 +8,18 @@ The Compose services resolve `api.152-70-22-84.sslip.io` to Docker's host gatewa
 
 ## Preparing a domain or hosting change
 
-The checked-in defaults above continue to address the existing deployment. A move to `factory.onesa.eu` requires the domain, certificate, proxy, API allowlist and mail configuration to be prepared together; these source settings do not establish that the cutover happened.
+The Compose templates retain historical route fallbacks for existing runtime compatibility. The deployment tools require explicit target selection. A move to `factory.onesa.eu` requires the domain, certificate, proxy, API allowlist and mail configuration to be prepared together; these source settings do not establish that the cutover happened.
 
 | Setting | Where it is used | Cutover value |
 |---|---|---|
-| `SMART_FACTORY_SSH_TARGET` | Optional environment default for the manual tools; `--ssh-target` overrides it | The owner-provided `user@host` or SSH alias of the prepared Onesa VM |
-| `SMART_FACTORY_UI_ORIGIN` | GitHub production environment variable; optional environment default for the manual tools | `https://factory.onesa.eu` once that frontend serves the verified release |
-| `SMART_FACTORY_API_ORIGIN` | GitHub production environment variable; optional environment default for the manual tools; Oracle Compose `.env` | The reviewed HTTPS origin of the Onesa API |
+| `SMART_FACTORY_SSH_TARGET` | Required selection through this environment value or `--ssh-target`; flag takes precedence | The owner-provided `user@host` or SSH alias of the prepared Onesa VM |
+| `SMART_FACTORY_UI_ORIGIN` | GitHub production environment variable; required manual selection through this value or `--ui-origin` | `https://factory.onesa.eu` once that frontend serves the verified release |
+| `SMART_FACTORY_API_ORIGIN` | GitHub production environment variable; required manual selection through this value or `--api-origin`; Oracle Compose `.env` | The reviewed HTTPS origin of the Onesa API |
 | `SMART_FACTORY_API_HOST` | Oracle Compose `.env` | The hostname part of the selected API origin, for the existing local Caddy host-gateway route |
 | `ALLOWED_ORIGIN` | API environment | Exact permitted frontend origins, comma-separated during a transition; no wildcard |
 | `PASSWORD_RESET_ORIGIN` | API and worker environments | The same single canonical frontend origin, such as `https://factory.onesa.eu` |
 
-`scripts/deploy-vm.py` and the maintained manual CLI accept `--ssh-target`, `--api-origin` and `--ui-origin`. A web origin does not select the SSH destination: without an explicit target, the tools still address `ubuntu@152.70.22.84`. Use the same target and origins for deployment and reconnect; local/server requests and results record them, and retained jobs reject a mismatch. Older receipts without these fields belong only to the original target and origins.
+`scripts/deploy-vm.py` and the maintained manual CLI require `--ssh-target`, `--api-origin` and `--ui-origin`, or their corresponding `SMART_FACTORY_*` environment settings. A missing selection stops before manifest loading, workspace access or any network operation. A web origin does not select the SSH destination, and the former VM and domains are never selected implicitly. Use the same target and origins for deployment and reconnect; local/server requests and results record them, and retained jobs reject a mismatch. Older receipts without these fields remain bound only to their original historical target and origins, which must now be supplied explicitly.
 
 The SSH target accepts a single `user@host` or owner-configured alias. URLs, inline ports, whitespace and shell options are rejected. Use a reviewed SSH alias for a private route, custom port or IPv6 host. OpenSSH uses the alias's existing `HostName` and `IdentityFile` settings, or its normal identity-file defaults. A separate `~/.ssh/id_ed25519` file is not required. Strict known-host checking, noninteractive public-key authentication, `IdentitiesOnly=yes` and all release gates remain required. The owner must supply the actual target, identity and trusted host-key configuration; this change does not discover an Onesa IP or provision a new VM. The selected host must already have the reviewed, healthy ARM64 deployment in `/opt/smart-factory-backend`; its release directory may belong to a different login user's home.
 
