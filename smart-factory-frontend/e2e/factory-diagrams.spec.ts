@@ -238,6 +238,26 @@ async function fixture(page: Page, { noWebGL = false, demo = false } = {}) {
             sampledAt: "2026-10-31T00:00:00Z",
           };
           break;
+        case "readings.trend":
+          value = {
+            scope: "operational",
+            unit: "°C",
+            total: 2,
+            verified: 2,
+            intervalMs: 60_000,
+            buckets: [
+              { timestamp: Date.now() - 60_000, value: 17, count: 1 },
+              { timestamp: Date.now(), value: 18, count: 1 },
+            ],
+            summary: { latest: 18, min: 17, max: 18, average: 17.5, latestAt: new Date().toISOString() },
+          };
+          break;
+        case "security.availability":
+          value = { enabled: true, demoOnly: false, canReview: false };
+          break;
+        case "security.overview":
+          value = { counts: [{ severity: "high", count: 1 }], coverage: { receiving: 1, configured: 2, stale: 1 } };
+          break;
         default:
           throw Error(`Unexpected diagram fixture request: ${procedure}`);
       }
@@ -1055,5 +1075,44 @@ for (const width of [390, 1440]) {
         page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
       )
       .toBe(true);
+  });
+}
+
+
+for (const width of [390, 1440]) {
+  test(`factory floor insights move all overview panels into selectable tabs at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 960 });
+    const control = await fixture(page);
+    const floor = page.getByTestId("factory-floor");
+    const choices = page.getByRole("group", { name: "Floor representation" });
+    for (const name of ["3D floor", "Floor plan", "Process / P&ID", "Electrical wiring", "Telemetry", "Factory Inventory", "Infrastructure"])
+      await expect(choices.getByRole("button", { name, exact: true })).toBeVisible();
+
+    await choices.getByRole("button", { name: "Telemetry" }).click();
+    await expect(floor).toHaveAttribute("data-view", "telemetry");
+    await expect(page.getByTestId("telemetry-preview")).toHaveCount(items.length);
+    await page.getByRole("button", { name: "Expand telemetry for Review pump" }).click();
+    await expect(page.getByTestId("expanded-factory-telemetry")).toBeVisible();
+    await expect(page.getByRole("region", { name: "Factory observations" })).toBeVisible();
+    await page.getByRole("button", { name: "Expand telemetry for Review tank" }).click();
+    await expect(page.getByLabel("Expanded telemetry for Review tank", { exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close expanded chart" }).click();
+    await expect(page.getByTestId("expanded-factory-telemetry")).toHaveCount(0);
+
+    await choices.getByRole("button", { name: "Factory Inventory" }).click();
+    await expect(floor).toHaveAttribute("data-view", "inventory");
+    await expect(page.getByRole("group", { name: "System item types" })).toBeVisible();
+    await expect(page.getByLabel("Inventory by location")).toContainText("Unassigned");
+    await expect(page.getByText("actual downtime duration requires verified operational history", { exact: false })).toBeVisible();
+
+    await choices.getByRole("button", { name: "Infrastructure" }).click();
+    await expect(floor).toHaveAttribute("data-view", "infrastructure");
+    await expect(page.getByLabel("Cybersecurity status")).toContainText("high findings");
+    await expect(page.getByLabel("Cybersecurity status")).toContainText("1 receiving");
+    await choices.getByRole("button", { name: "3D floor" }).click();
+    await expect(sceneFor(page)).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(control.writes).toEqual([]);
+    expect(control.errors).toEqual([]);
   });
 }
