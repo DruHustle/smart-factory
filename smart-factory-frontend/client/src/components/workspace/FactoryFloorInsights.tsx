@@ -309,12 +309,12 @@ function FactoryTelemetry({
           <option value={86_400_000}>Last 24 hours</option>
         </select>
       </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
         <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-muted-foreground">
-          <span>Source</span>
+          <span className="shrink-0 whitespace-nowrap">Source</span>
           <select
             aria-label="Overview observation source"
-            className="workspace-control min-w-0"
+            className="workspace-control min-w-0 flex-1"
             value={selection.selection}
             onChange={(event) => {
               update({ observationSource: event.target.value });

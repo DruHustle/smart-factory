@@ -38,4 +38,4 @@ After an engineer provisions or changes a gateway mapping, DeviceService publish
 
 The gateway relays sensor telemetry to the platform. The WROVER connects only to the Raspberry Pi's local broker; it does not connect directly to CloudAMQP or the dashboard. Keep per-gateway topic ACLs, TLS, protocol credentials, and machine safety controls configured at the site. This platform is not a safety-rated control system.
 
-See the [Raspberry Pi gateway guide](https://github.com/DruHustle/smart-factory-edge/blob/master/raspberry-pi/README.md), [ESP32 WROVER guide](https://github.com/DruHustle/smart-factory-edge/blob/master/esp32-wrover/README.md), and the [AAS permissions and deployment guide](authorization-and-aas.md).
+See the [Raspberry Pi gateway guide](../../smart-factory-edge/raspberry-pi/README.md), [ESP32 WROVER guide](../../smart-factory-edge/esp32-wrover/README.md), and the [AAS permissions and deployment guide](authorization-and-aas.md).
