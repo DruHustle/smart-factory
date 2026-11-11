@@ -28,3 +28,7 @@ The final topic/transport revision passed all 233 .NET tests. `mqtt-topic-v1` en
 ## Explicit legacy-broker evidence mode
 
 MQTT 5 remains the default. A broker that refuses MQTT 5 may use the explicit worker setting `MqttProtocolVersion=3.1.1-historical`. The service subscribes with MQTT 3.1.1 and retains original acquisition modes/identities/times, but always forwards `transportRetainVerified=false` for both telemetry and heartbeat observations. These cannot update current connectivity or threshold incidents. No automatic downgrade, broker ACL change or inferred retained flag is permitted. A configured MQTT 5 source retains the existing verified subscription policy.
+
+## November security servicing candidate
+
+The 11 November candidate updates the SDK to 10.0.404, ASP.NET runtime images to 10.0.15-noble and compatible Microsoft packages to 10.0.15. The prior ARM64 audit identified CVE-2026-114146, CVE-2026-114147 and CVE-2026-114149 in runtime10.0.14. Historical results above retain their original versions; fresh package audit, tests and exact-image qualification are required for this candidate. See [Microsoft November servicing](https://devblogs.microsoft.com/dotnet/dotnet-and-dotnet-framework-november-2026-servicing-updates/) and [10.0.15 release notes](https://github.com/dotnet/core/blob/main/release-notes/10.0/10.0.15/10.0.15.md).

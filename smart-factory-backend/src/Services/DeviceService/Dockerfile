@@ -12,7 +12,7 @@
 # Stage 1: Base Runtime Image
 # ----------------------------------------
 # Uses the ASP.NET Core runtime image (smaller than SDK)
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.15-noble AS base
 WORKDIR /app
 ENV ASPNETCORE_HTTP_PORTS=8080 PORT=8080
 RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
@@ -28,7 +28,7 @@ RUN id app
 # Stage 2: Build Stage
 # ----------------------------------------
 # Uses the full SDK image for building the application
-FROM mcr.microsoft.com/dotnet/sdk:10.0.403-noble AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.404-noble AS build
 WORKDIR /src
 
 # Copy solution and project files first (Layer Caching Optimization)
