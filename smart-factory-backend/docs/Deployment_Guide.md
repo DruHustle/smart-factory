@@ -4,7 +4,7 @@ The maintained production topology is Oracle ARM64 API plus a singleton telemetr
 
 ## Prepare and qualify
 
-Resolve clean, immutable source revisions for frontend, backend and edge. Build the combined ARM64 image through the frontend's `scripts/prepare-backend-context.py` and `deploy/render/Dockerfile`; the historical filename is retained for compatibility. Keep runtime credentials outside the build context. Use the SDK pinned in `global.json` (currently .NET 10.0.403) and run:
+Resolve clean, immutable source revisions for frontend, backend and edge. Build the combined ARM64 image through the frontend's `scripts/prepare-backend-context.py` and `deploy/render/Dockerfile`; the historical filename is retained for compatibility. Keep runtime credentials outside the build context. Use the SDK pinned in `global.json` (currently .NET 10.0.404) and run:
 
 ```bash
 dotnet restore src/SmartFactory.sln -p:NuGetAudit=true -p:NuGetAuditMode=all -p:NuGetAuditLevel=high -warnaserror:NU1900,NU1903,NU1904 --force-evaluate
