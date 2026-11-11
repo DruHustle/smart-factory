@@ -25,6 +25,23 @@ component repositories. Preserve those original histories independently before
 retirement. Local tools, credentials, deployment evidence and extra worktrees belong
 in ignored `local-tools/`, never in Git.
 
+## Shared Onesa account sign-in
+
+The dashboard supports optional Portal sign-in alongside its existing local
+accounts. Apply dashboard migration `0040_onesa_identity.sql`, register the exact
+HTTPS Factory callback in Portal, and configure the server-only
+`ONESA_IDENTITY_*` values in the frontend component's environment example.
+See [the identity contract](smart-factory-frontend/docs/ONESA_IDENTITY.md).
+
+A new ordinary Onesa account signs in as a pending viewer with no asset access.
+A local administrator explicitly approves access in User Access. A person with
+an existing local account can link it by proving its password; the account keeps
+its existing role. This deployment has a global factory role boundary, not
+per-organization memberships. Portal administrators require current MFA and a
+live Factory administrator grant. Revocation, role downgrade and logout invalidate
+the corresponding local session; provider outages deny access without discarding
+an otherwise valid session.
+
 ## Optional, isolated automation engines
 
 Smart Factory may run a **Node-RED OT edge sidecar** next to its existing Python

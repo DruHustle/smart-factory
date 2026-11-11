@@ -746,6 +746,9 @@ test("floor plan zoom preserves item placement and held-drag pan semantics", asy
     .click();
   await expect(plan).toHaveAttribute("data-zoom", "1.250");
   expect(await readPlacements(page)).toEqual(placements);
+  // Pointer coordinates do not auto-scroll: the pump can sit just below the
+  // viewport after the zoom toolbar scrolls into view.
+  await plan.getByRole("button", { name: "Select Review pump", exact: true }).scrollIntoViewIfNeeded();
   const screenPoint = (x: number, y: number) =>
     plan.evaluate(
       (element, point) => {

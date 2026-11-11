@@ -302,6 +302,9 @@ function publicUser(
     ...safeUser,
     access: {
       ...base,
+      ...((user as db.User & { onesaAccessPending?: boolean }).onesaAccessPending
+        ? { provisioningRequired: true }
+        : {}),
       canSwitchData: !base.demoOnly,
       workspaceView: (base.demoOnly
         ? "demo"
@@ -619,6 +622,7 @@ export const appRouter = router({
         if (
           (isDemoAccount(input.email) && !demoAccountsEnabled()) ||
           !user ||
+          user.loginMethod === "onesa" ||
           user.disabledAt ||
           !user.password ||
           !(await sdk.comparePassword(input.password, user.password))
@@ -810,9 +814,22 @@ export const appRouter = router({
       .input(z.object({ id: z.number().int().positive() }).strict())
       .query(({ input }) => getWroverQos(input.id)),
     requestWroverQos: engineerProcedure
-      .input(z.object({ id: z.number().int().positive(), expectedRevision: z.number().int().min(0).max(0xffffffff), uplink: mqttQosLevel, downlink: mqttQosLevel }).strict())
+      .input(
+        z
+          .object({
+            id: z.number().int().positive(),
+            expectedRevision: z.number().int().min(0).max(0xffffffff),
+            uplink: mqttQosLevel,
+            downlink: mqttQosLevel,
+          })
+          .strict(),
+      )
       .mutation(async ({ input, ctx }) => {
-        const token = await sdk.createSessionToken(ctx.user, { expiresInMs: 60_000, sessionId: ctx.session?.sessionId });
+        const token = await sdk.createSessionToken(ctx.user, {
+          expiresInMs: 60_000,
+          sessionId: ctx.session?.sessionId,
+          onesa: ctx.session?.onesa,
+        });
         return requestWroverQos(input, ctx.user.id, token);
       }),
     pulseIndicator: operatorProcedure
@@ -854,10 +871,14 @@ export const appRouter = router({
         }
         const commandId = randomUUID();
         const qosPolicy = await getWroverQos(input.id);
-        const qos = qosPolicy?.status === "applied" && qosPolicy.gatewayPolicyCurrent ? qosPolicy.downlink : 1;
+        const qos =
+          qosPolicy?.status === "applied" && qosPolicy.gatewayPolicyCurrent
+            ? qosPolicy.downlink
+            : 1;
         const userToken = await sdk.createSessionToken(ctx.user, {
           expiresInMs: 60_000,
           sessionId: ctx.session?.sessionId,
+          onesa: ctx.session?.onesa,
         });
         return publishWroverIndicator(
           {
@@ -1261,6 +1282,7 @@ export const appRouter = router({
         const userToken = await sdk.createSessionToken(ctx.user, {
           expiresInMs: 60_000,
           sessionId: ctx.session?.sessionId,
+          onesa: ctx.session?.onesa,
         });
         return publishAda031Control(
           {

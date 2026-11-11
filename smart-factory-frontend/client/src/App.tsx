@@ -92,7 +92,7 @@ function LegacyItem({
 }
 
 function AppRouter() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, logout } = useAuth();
   const [location] = useHashLocation();
 
   // A recovery link authorizes only the password change. It must also work
@@ -127,6 +127,29 @@ function AppRouter() {
       </div>
     );
   }
+
+  if (user?.access?.provisioningRequired)
+    return (
+      <main className="min-h-screen flex items-center justify-center bg-background text-foreground p-6">
+        <section
+          className="max-w-md space-y-4"
+          aria-labelledby="factory-access-heading"
+        >
+          <h1 id="factory-access-heading" className="text-2xl font-semibold">
+            Your Onesa account is signed in
+          </h1>
+          <p>
+            A Factory administrator must approve access to this factory before
+            its records are available. Share your account email with your
+            administrator.
+          </p>
+          <p>{user.email}</p>
+          <button className="underline" onClick={() => void logout()}>
+            Sign out
+          </button>
+        </section>
+      </main>
+    );
 
   // Show login page for unauthenticated users
   if (!user) {
