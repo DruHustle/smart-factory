@@ -552,6 +552,28 @@ export default function UserAccess({
                         </Badge>
                       )}
                     </p>
+                    {a.onesaAccessPending && (
+                      <div className="mt-2 space-y-2 text-sm">
+                        <p>
+                          Onesa sign-in confirmed. Verify this person's identity
+                          and factory affiliation before approving local access.
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={busy || !!a.disabledAt}
+                          onClick={() =>
+                            role.mutate({
+                              id: a.id,
+                              role: "viewer",
+                              expectedVersion: a.accessVersion,
+                            })
+                          }
+                        >
+                          Approve viewer access
+                        </Button>
+                      </div>
+                    )}
                     <p
                       className="break-all text-sm text-muted-foreground"
                       title={a.email ?? ""}

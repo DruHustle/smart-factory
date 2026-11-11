@@ -129,6 +129,12 @@ export async function changeUserAccess(
         role: users.role,
         disabledAt: users.disabledAt,
       });
+    // An explicit role decision by the existing administrator workflow approves
+    // access to this Factory deployment. Sign-in itself never does so.
+    if (change.role && change.enabled !== false)
+      await tx.execute(
+        sql`UPDATE onesa_factory_links SET local_access_approved=true WHERE user_id=${id}`,
+      );
     return updated;
   });
 }

@@ -11,6 +11,12 @@ import { randomUUID } from "node:crypto";
 import { sessionRevoked, revokeSession } from "../accountAccess";
 import { demoAccountsEnabled } from "../../shared/demo-accounts";
 import { sharedDemoIdentity } from "../../shared/access-policy";
+import {
+  verifyPortalSession,
+  portalDatabase,
+  type PortalUser,
+} from "../portalIdentity";
+import { sql } from "drizzle-orm";
 
 // Utility function
 const isNonEmptyString = (value: unknown): value is string =>
@@ -26,6 +32,7 @@ export type SessionPayload = {
   authVersion?: number;
   expiresAt?: number;
   credentialChange?: boolean;
+  onesa?: boolean;
 };
 
 class SDKServer {
@@ -43,8 +50,13 @@ class SDKServer {
       throw new Error("JWT_SECRET must be configured in production");
     }
     const secret = ENV.cookieSecret || "default-secret-for-local-dev";
-    if (process.env.NODE_ENV === "production" && Buffer.byteLength(secret, "utf8") < 32) {
-      throw new Error("JWT_SECRET must contain at least 32 bytes in production");
+    if (
+      process.env.NODE_ENV === "production" &&
+      Buffer.byteLength(secret, "utf8") < 32
+    ) {
+      throw new Error(
+        "JWT_SECRET must contain at least 32 bytes in production",
+      );
     }
     return new TextEncoder().encode(secret);
   }
@@ -62,7 +74,7 @@ class SDKServer {
    */
   async createSessionToken(
     user: User,
-    options: { expiresInMs?: number; sessionId?: string } = {}
+    options: { expiresInMs?: number; sessionId?: string; onesa?: boolean } = {},
   ): Promise<string> {
     return this.signSession(
       {
@@ -73,14 +85,15 @@ class SDKServer {
         role: user.role,
         authVersion: user.authVersion ?? 0,
         credentialChange: user.passwordChangeRequired === true,
+        onesa: options.onesa === true,
       },
-      options
+      options,
     );
   }
 
   async signSession(
     payload: SessionPayload,
-    options: { expiresInMs?: number; sessionId?: string } = {}
+    options: { expiresInMs?: number; sessionId?: string } = {},
   ): Promise<string> {
     const issuedAt = Date.now();
     const expiresInMs = options.expiresInMs ?? 8 * 60 * 60 * 1000;
@@ -96,10 +109,15 @@ class SDKServer {
       sid: options.sessionId ?? payload.sessionId ?? randomUUID(),
       sv: payload.authVersion ?? 0,
       pc: payload.credentialChange === true,
+      oi: payload.onesa === true,
     })
       .setProtectedHeader({ alg: "HS256", typ: "JWT" })
       .setIssuer("smart-factory-iot")
-      .setAudience("smart-factory-iot-api")
+      .setAudience(
+        payload.onesa === true
+          ? "smart-factory-onesa-api"
+          : "smart-factory-iot-api",
+      )
       .setSubject(payload.openId)
       .setIssuedAt(Math.floor(issuedAt / 1000))
       .setExpirationTime(expirationSeconds)
@@ -107,7 +125,7 @@ class SDKServer {
   }
 
   async verifySession(
-    token: string | undefined | null
+    token: string | undefined | null,
   ): Promise<SessionPayload | null> {
     if (!token) {
       return null;
@@ -118,9 +136,21 @@ class SDKServer {
       const { payload } = await jwtVerify(token, secretKey, {
         algorithms: ["HS256"],
         issuer: "smart-factory-iot",
-        audience: "smart-factory-iot-api",
+        audience: ["smart-factory-iot-api", "smart-factory-onesa-api"],
       });
-      const { openId, appId, name, email, role } = payload as Record<string, unknown>;
+      // Older releases accept only the standalone audience. Federated sessions
+      // must never become local sessions during rollback or claim confusion.
+      if (
+        payload.aud !==
+        (payload.oi === true
+          ? "smart-factory-onesa-api"
+          : "smart-factory-iot-api")
+      )
+        return null;
+      const { openId, appId, name, email, role } = payload as Record<
+        string,
+        unknown
+      >;
 
       if (
         !isNonEmptyString(openId) ||
@@ -138,8 +168,10 @@ class SDKServer {
         role: typeof role === "string" ? role : undefined,
         sessionId: typeof payload.sid === "string" ? payload.sid : undefined,
         authVersion: typeof payload.sv === "number" ? payload.sv : undefined,
-        expiresAt: typeof payload.exp === "number" ? payload.exp * 1000 : undefined,
+        expiresAt:
+          typeof payload.exp === "number" ? payload.exp * 1000 : undefined,
         credentialChange: payload.pc === true,
+        onesa: payload.oi === true,
       };
     } catch (error) {
       return null;
@@ -162,31 +194,63 @@ class SDKServer {
     return token;
   }
 
-  async authenticateRequestWithSession(req: Request): Promise<{ user: User; session: SessionPayload }> {
+  async authenticateRequestWithSession(
+    req: Request,
+  ): Promise<{ user: PortalUser; session: SessionPayload }> {
     const session = await this.verifySession(this.requestToken(req));
 
-    if (!session || !session.sessionId || !/^[0-9a-f-]{36}$/.test(session.sessionId) ||
-        !Number.isSafeInteger(session.authVersion) || !session.expiresAt) {
+    if (
+      !session ||
+      !session.sessionId ||
+      !/^[0-9a-f-]{36}$/.test(session.sessionId) ||
+      !Number.isSafeInteger(session.authVersion) ||
+      !session.expiresAt
+    ) {
       throw ForbiddenError("Invalid or missing authentication");
     }
 
     const user = await db.getUserByOpenId(session.openId);
-    if (!user || user.disabledAt || session.authVersion !== user.authVersion ||
-        (user.passwordChangeRequired && (!session.credentialChange || !user.temporaryCredentialExpiresAt || user.temporaryCredentialExpiresAt.getTime() <= Date.now())) ||
-        (sharedDemoIdentity(user) && !demoAccountsEnabled()) || await sessionRevoked(session.sessionId)) {
+    if (
+      !user ||
+      user.disabledAt ||
+      (user.loginMethod === "onesa" && !session.onesa) ||
+      session.authVersion !== user.authVersion ||
+      (user.passwordChangeRequired &&
+        (!session.credentialChange ||
+          !user.temporaryCredentialExpiresAt ||
+          user.temporaryCredentialExpiresAt.getTime() <= Date.now())) ||
+      (sharedDemoIdentity(user) && !demoAccountsEnabled()) ||
+      (await sessionRevoked(session.sessionId))
+    ) {
       throw ForbiddenError("Session is no longer active");
     }
-    return { user, session };
+    return {
+      user: session.onesa
+        ? await verifyPortalSession(user, session.sessionId)
+        : user,
+      session,
+    };
   }
 
   async authenticateRequest(req: Request): Promise<User> {
-    return (await this.authenticateRequestWithSession(req)).user;
+    const user = (await this.authenticateRequestWithSession(req)).user;
+    if (user.onesaAccessPending)
+      throw ForbiddenError(
+        "Factory access requires local administrator approval",
+      );
+    return user;
   }
 
   async revokeRequestSession(req: Request): Promise<string | null> {
     const session = await this.verifySession(this.requestToken(req));
     if (!session?.sessionId || !session.expiresAt) return null;
     await revokeSession(session.sessionId, session.openId, session.expiresAt);
+    if (session.onesa)
+      await (
+        await portalDatabase()
+      ).execute(
+        sql`DELETE FROM onesa_factory_sessions WHERE session_id=${session.sessionId}::uuid`,
+      );
     return session.sessionId;
   }
 }
