@@ -94,4 +94,4 @@ jobs:
           path: candidate/smart-factory-frontend/test-results/arm64
           if-no-files-found: error
           compression-level: 0
-          retention-days: 7
+          retention-days: ${{ github.event_name == 'pull_request' && 1 || 7 }}
