@@ -32,7 +32,7 @@ COPY package.json pnpm-lock.yaml ./
 COPY scripts/prepare-runtime.mjs ./scripts/
 RUN node scripts/prepare-runtime.mjs && pnpm install --prod --frozen-lockfile
 
-FROM mcr.microsoft.com/dotnet/sdk:10.0.403-noble AS backend-build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.404-noble AS backend-build
 WORKDIR /source
 COPY --from=backend global.json ./
 COPY --from=backend src/ ./src/
@@ -42,7 +42,7 @@ RUN dotnet publish src/Services/IdentityService/IdentityService.csproj -c Releas
 RUN dotnet publish src/Services/AnalyticsService/AnalyticsService.csproj -c Release -o /published/analytics /p:UseAppHost=false
 RUN dotnet publish src/Services/NotificationService/NotificationService.csproj -c Release -o /published/notification /p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.15-noble AS runtime
 ARG SOURCE_REVISION
 ARG BACKEND_SOURCE_REVISION
 ARG EDGE_SOURCE_REVISION

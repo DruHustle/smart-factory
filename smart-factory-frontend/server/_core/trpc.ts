@@ -11,6 +11,7 @@ import {
   DEMONSTRATION_READ_ONLY,
 } from "../../shared/access-policy";
 import { resolveVisibility, withVisibility } from "../demoData";
+import type { PortalUser } from "../portalIdentity";
 
 const t = initTRPC.context<TrpcContext>().create({
   transformer: superjson,
@@ -108,6 +109,15 @@ const walkthroughQueries = new Set([
 ]);
 const accessBoundary = t.middleware(
   async ({ ctx, next, type, path, getRawInput }) => {
+    if (
+      (ctx.user as PortalUser | null)?.onesaAccessPending &&
+      !["auth.me", "auth.logout"].includes(path)
+    )
+      throw new TRPCError({
+        code: "FORBIDDEN",
+        message:
+          "Your Onesa account is signed in. A Factory administrator must approve local access before you can view factory records.",
+      });
     if (
       ctx.user?.passwordChangeRequired &&
       ![

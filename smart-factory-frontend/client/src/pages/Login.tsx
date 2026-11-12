@@ -23,6 +23,7 @@ import { trpc } from "@/lib/trpc";
 import { safeSessionStorage } from "@/lib/storage";
 import { userFacingApiError } from "@/lib/errors";
 import { DEMO_ACCOUNTS, type DemoAccount } from "../../../shared/demo-accounts";
+import { onesaAvailable, startOnesa } from "@/lib/api-auth";
 
 const DEMO_ACCOUNT_CACHE_KEY = "smart-factory:demo-account-shortcuts:v1";
 const BUILD_ENABLES_DEMO_ACCOUNTS =
@@ -65,6 +66,33 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
+  const [onesaEnabled, setOnesaEnabled] = useState(false);
+  const onesaResult = new URLSearchParams(
+    window.location.hash.split("?")[1] || "",
+  ).get("onesa");
+  useEffect(() => {
+    let active = true;
+    void onesaAvailable()
+      .then((enabled) => {
+        if (active) setOnesaEnabled(enabled);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
+  async function signInWithOnesa(link = false) {
+    setError("");
+    setIsLoading(true);
+    try {
+      await startOnesa(link ? { email: email.trim(), password } : undefined);
+    } catch {
+      setError(
+        "Onesa sign-in could not be completed. Check your details and try again.",
+      );
+      setIsLoading(false);
+    }
+  }
   const [lastConfirmedDemoAccounts, setLastConfirmedDemoAccounts] =
     useState<DemoAccountShortcut[]>(initialDemoAccounts);
   const demoAccountsQuery = trpc.auth.demoAccounts.useQuery(undefined, {
@@ -147,6 +175,36 @@ export default function Login() {
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {onesaResult && (
+            <p role="status">
+              {onesaResult === "link"
+                ? "This email already has a Factory account. Enter its email and password below, then link it to your Onesa account."
+                : "Onesa sign-in did not complete. Try again or use your existing Factory account."}
+            </p>
+          )}
+          {onesaEnabled && (
+            <div className="space-y-2">
+              <Button
+                type="button"
+                className="w-full"
+                disabled={isLoading}
+                onClick={() => void signInWithOnesa()}
+              >
+                Sign in with Onesa
+              </Button>
+              {onesaResult === "link" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  disabled={isLoading || !email || !password}
+                  onClick={() => void signInWithOnesa(true)}
+                >
+                  Link existing Factory account
+                </Button>
+              )}
+            </div>
+          )}
           {/* Login Form */}
           <form onSubmit={handleLogin} className="space-y-4">
             {/* Email Field */}
