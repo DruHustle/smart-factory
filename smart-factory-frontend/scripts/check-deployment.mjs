@@ -33,8 +33,8 @@ for(const [source,destination]of [['/api/:path*','/api/:path*'],['/health/live',
 }
 const headers=vercel.headers?.find(x=>x.source==='/:path*')?.headers??[];
 if(!headers.find(x=>x.key==='Content-Security-Policy')?.value.includes("frame-ancestors 'none'"))failures.push('Vercel must prohibit framing through CSP');
-requireText(dockerfile,/dotnet\/sdk:10\.0\.403-noble/,'Bundle must build using the qualified .NET 10 SDK');
-requireText(dockerfile,/dotnet\/aspnet:10\.0\.14-noble AS runtime/,'Bundle must run the qualified .NET 10 runtime');
+requireText(dockerfile,/dotnet\/sdk:10\.0\.404-noble/,'Bundle must build using the qualified .NET 10 SDK');
+requireText(dockerfile,/dotnet\/aspnet:10\.0\.15-noble AS runtime/,'Bundle must run the qualified .NET 10 runtime');
 requireText(dockerfile,/org.opencontainers.image.revision=\$SOURCE_REVISION[\s\S]*io.smartfactory.backend.revision[\s\S]*io.smartfactory.edge.revision/,'Image must retain all source identities');
 requireText(dockerfile,/^USER app$/m,'Bundle must run non-root');
 requireText(dockerfile,/HEALTHCHECK[\s\S]*\/health\/live/,'Container health must use liveness during migrations');

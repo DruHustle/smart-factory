@@ -32,6 +32,36 @@ function getTRPCUrl() {
   return `${API_BASE_URL}/trpc`;
 }
 
+export async function onesaAvailable(): Promise<boolean> {
+  const response = await fetch(`${API_BASE_URL}/auth/onesa/config`, {
+    credentials: "include",
+    signal: AbortSignal.timeout(10000),
+  });
+  return response.ok && (await response.json()).enabled === true;
+}
+export async function startOnesa(link?: { email: string; password: string }) {
+  const current = window.location.hash;
+  const returnTo = current.startsWith("#/login?")
+    ? new URLSearchParams(current.split("?")[1]).get("returnTo") || "#/"
+    : current || "#/";
+  const response = await fetch(`${API_BASE_URL}/auth/onesa/start`, {
+    method: "POST",
+    credentials: "include",
+    signal: AbortSignal.timeout(10000),
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ returnTo, ...(link ? { link } : {}) }),
+  });
+  if (!response.ok)
+    throw Error(
+      "Onesa sign-in could not start. Check your details and try again.",
+    );
+  const { url } = await response.json(),
+    destination = new URL(url);
+  if (destination.protocol !== "https:")
+    throw Error("Invalid Onesa sign-in destination.");
+  window.location.assign(destination.href);
+}
+
 const trpcAuthClient = createTRPCProxyClient<AppRouter>({
   links: [
     httpBatchLink({

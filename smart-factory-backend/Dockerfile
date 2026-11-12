@@ -1,5 +1,5 @@
 # Use the SDK image to build the application
-FROM mcr.microsoft.com/dotnet/sdk:10.0.403-noble AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.404-noble AS build
 WORKDIR /src
 
 # Copy the solution file and restore all projects
@@ -30,7 +30,7 @@ RUN dotnet publish "src/Services/DeviceService/DeviceService.csproj" -c Release 
     test -f /app/publish/TelemetryService/TelemetryService.runtimeconfig.json
 
 # Use the runtime image for the final stage
-FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.15-noble AS final
 WORKDIR /app
 COPY --from=build --chown=app:app /app/publish .
 COPY --from=build --chown=app:app /src/deploy/migrations ./deploy/migrations

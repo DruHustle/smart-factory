@@ -71,4 +71,4 @@ dotnet restore src/SmartFactory.sln -p:NuGetAudit=true -p:NuGetAuditMode=all -p:
 dotnet test src/SmartFactory.sln -c Release --no-restore
 ```
 
-Use SDK 10.0.403 from `global.json` and set `TEST_DASHBOARD_DATABASE_CONNECTION` to that disposable database. `--filter 'Category!=Postgres'` runs tests that do not require PostgreSQL. Software qualification and loopback protocol fixtures do not certify the customer's actual controller, register map, broker ACL, certificate trust, serial adapter or TSN hardware.
+Use SDK 10.0.404 from `global.json` and set `TEST_DASHBOARD_DATABASE_CONNECTION` to that disposable database. `--filter 'Category!=Postgres'` runs tests that do not require PostgreSQL. Software qualification and loopback protocol fixtures do not certify the customer's actual controller, register map, broker ACL, certificate trust, serial adapter or TSN hardware.

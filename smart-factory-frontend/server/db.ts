@@ -369,6 +369,7 @@ export async function listUsers() {
         role: users.role,
         disabledAt: users.disabledAt,
         accessVersion: users.authVersion,
+        onesaAccessPending: sql<boolean>`exists(select 1 from onesa_factory_links l where l.user_id=${users.id} and not l.local_access_approved)`,
         createdAt: users.createdAt,
         lastSignedIn: users.lastSignedIn,
       })

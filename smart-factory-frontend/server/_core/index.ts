@@ -1,7 +1,10 @@
 import { installMqttQosAckRoute } from "../mqttQosHttp";
 import { installRequestMetrics } from "../infrastructure/metrics";
 import { installNetworkDiagnostics } from "../network-diagnostics/http";
-import { installRecoveryEvidence, startInfrastructureMonitoring } from "../infrastructure/store";
+import {
+  installRecoveryEvidence,
+  startInfrastructureMonitoring,
+} from "../infrastructure/store";
 import { requestedDataWorkspace } from "../../shared/data-workspace";
 import { installOperatingEvidence } from "../operatingEvidence";
 import { getRuntimeContract } from "../runtimeContract";
@@ -31,6 +34,7 @@ import {
 import { installBrowserOriginPolicy } from "./browserOriginPolicy";
 import { timingSafeEqual } from "node:crypto";
 import { createLoginRateLimit } from "./loginRateLimit";
+import { installPortalIdentity } from "../portalIdentityRoutes";
 import { z } from "zod";
 import { aasRepositoryProxy } from "../aasRepositoryProxy";
 import { edgeTagMappingsSchema } from "../../shared/edge-configuration";
@@ -103,7 +107,9 @@ async function startServer() {
   configureTrustedProxies(app);
   const allowedOrigins = new Set(
     (process.env.ALLOWED_ORIGIN || "http://localhost:5173")
-      .split(",").map((origin) => origin.trim()).filter(Boolean),
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   );
   installBrowserOriginPolicy(app, allowedOrigins);
   const server = createServer(app);
@@ -196,6 +202,7 @@ async function startServer() {
   });
 
   installOperatingEvidence(app);
+  installPortalIdentity(app);
   installNetworkDiagnostics(app);
   installRecoveryEvidence(app);
   installArtifactRoutes(app);
@@ -671,6 +678,7 @@ async function startServer() {
         );
         if (
           demonstrationOnly(user) ||
+          user.onesaAccessPending ||
           requestedDataWorkspace(request.headers.cookie) === "demo" ||
           user.passwordChangeRequired ||
           !session.sessionId ||
