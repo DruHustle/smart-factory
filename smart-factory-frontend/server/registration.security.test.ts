@@ -12,9 +12,13 @@ it("production signup cannot grant public access to factory data", async () => {
       res: {},
     } as TrpcContext);
     expect(await caller.auth.registrationPolicy()).toEqual({
-      enabled: true,
+      enabled: false,
       requiresApproval: true,
     });
+    await expect(caller.auth.login({ email: "customer@example.test", password: "synthetic-password" }))
+      .rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(caller.auth.requestRegistration({ email: "customer@example.test", name: "Synthetic User",
+      organization: "Test workspace", password: "Strong-password-123!" })).rejects.toMatchObject({ code: "FORBIDDEN" });
     await expect(
       caller.auth.register({
         email: "stranger@example.com",
