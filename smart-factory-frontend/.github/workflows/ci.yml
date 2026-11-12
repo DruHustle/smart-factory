@@ -107,7 +107,11 @@ jobs:
           QR_DECODER_PYTHON="$RUNNER_TEMP/onesa-aas/bin/python" pnpm exec playwright test --config=playwright.passport.config.ts
 
       - name: Run E2E Smoke Tests
-        env: { E2E_PORT: "3100" }
+        # Keep the Compose listeners outside the Linux ephemeral client port range.
+        env:
+          E2E_PORT: "3100"
+          E2E_DATABASE_PORT: "15432"
+          E2E_REDIS_PORT: "16379"
         run: pnpm e2e
 
       - name: Collect bounded synthetic browser failure contexts
