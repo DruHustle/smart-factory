@@ -13,6 +13,7 @@ export type PortalUser = User & { onesaAccessPending?: boolean };
 export const randomValue = () => randomBytes(32).toString("base64url");
 export const digest = (value: string) =>
   createHash("sha256").update(value).digest("base64url");
+export const portalRequired = () => process.env.NODE_ENV === "production" || process.env.ONESA_IDENTITY_ENABLED === "true";
 export function portalConfig(env = process.env) {
   if (env.ONESA_IDENTITY_ENABLED !== "true") return null;
   const issuer = env.ONESA_IDENTITY_ISSUER || "",

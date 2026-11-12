@@ -8,6 +8,7 @@ import { isPlannedAsset } from "./planned-assets";
 import { factoriesRouter } from "./factories";
 import { deleteAssetInventoryRecord } from "./inventory-deletion";
 import { requestedDataWorkspace } from "../shared/data-workspace";
+import { portalRequired } from "./portalIdentity";
 import { publicDemoDeployment } from "../shared/access-policy";
 import {
   notificationPage,
@@ -517,7 +518,7 @@ export const appRouter = router({
   auth: router({
     passwordResetPolicy: publicProcedure.query(() => passwordResetPolicy()),
     registrationPolicy: publicProcedure.query(() => ({
-      enabled: true,
+      enabled: !portalRequired(),
       requiresApproval: true,
     })),
     requestRegistration: publicProcedure
@@ -531,6 +532,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ input }) => {
+        if (portalRequired()) throw new TRPCError({ code: "FORBIDDEN", message: "Manage your account in Onesa Company Portal." });
         await requestRegistration({
           ...input,
           passwordHash: await sdk.hashPassword(input.password),
@@ -544,6 +546,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ input }) => {
+        if (portalRequired()) throw new TRPCError({ code: "FORBIDDEN", message: "Manage your account in Onesa Company Portal." });
         await issuePasswordReset(input.email);
         return { submitted: true };
       }),
@@ -557,6 +560,7 @@ export const appRouter = router({
           .strict(),
       )
       .mutation(async ({ input, ctx }) => {
+        if (portalRequired()) throw new TRPCError({ code: "FORBIDDEN", message: "Manage your account in Onesa Company Portal." });
         const result = await accountAction(() =>
           resetPasswordWithToken(input.token, input.newPassword),
         );
@@ -602,6 +606,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ input, ctx }) => {
+        if (portalRequired() && !isDemoAccount(input.email)) throw new TRPCError({ code: "FORBIDDEN", message: "Use your Onesa Company Portal account." });
         let user = await db.getUserByEmail(input.email);
         if (!user && !isDemoAccount(input.email)) {
           const pendingPasswordHash = await pendingRegistrationCredential(
@@ -691,6 +696,7 @@ export const appRouter = router({
         }),
       )
       .mutation(async ({ input, ctx }) => {
+        if (portalRequired()) throw new TRPCError({ code: "FORBIDDEN", message: "Manage your account in Onesa Company Portal." });
         if (
           !ctx.user.password ||
           (!ctx.user.passwordChangeRequired &&
