@@ -93,7 +93,6 @@ public sealed class RenderHealthEndpointService : BackgroundService
 {
     private readonly ILogger<RenderHealthEndpointService> _logger;
     private readonly MqttTelemetrySubscriberService _subscriber;
-    private TcpListener? _listener;
     private readonly IServiceScopeFactory _scopes;
     private readonly SemaphoreSlim _connections = new(32);
 
@@ -113,10 +112,10 @@ public sealed class RenderHealthEndpointService : BackgroundService
         // In the split Render topology TelemetryService is the worker's public
         // health endpoint. In the legacy/all-in-one bundle it remains private
         // behind the Node API readiness aggregator.
-        _listener = new TcpListener(ResolveBindAddress(
+        using var listener = new TcpListener(ResolveBindAddress(
             Environment.GetEnvironmentVariable("RENDER_SERVICE_ROLE"),
             Environment.GetEnvironmentVariable("BACKEND_DEPLOYMENT_MODE")), port);
-        _listener.Start();
+        listener.Start();
         _logger.LogInformation("Health endpoint listening on port {Port}.", port);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -124,7 +123,7 @@ public sealed class RenderHealthEndpointService : BackgroundService
             TcpClient client;
             try
             {
-                client = await _listener.AcceptTcpClientAsync(stoppingToken);
+                client = await listener.AcceptTcpClientAsync(stoppingToken);
             }
             catch (Exception error) when (IsExpectedListenerShutdown(error, stoppingToken))
             {
@@ -188,12 +187,6 @@ public sealed class RenderHealthEndpointService : BackgroundService
             _logger.LogWarning(error, "Health request failed.");
         }
         finally { _connections.Release(); }
-    }
-
-    public override Task StopAsync(CancellationToken cancellationToken)
-    {
-        _listener?.Stop();
-        return base.StopAsync(cancellationToken);
     }
 
     public static bool IsExpectedListenerShutdown(Exception error, CancellationToken stoppingToken) =>
