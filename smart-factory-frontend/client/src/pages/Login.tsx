@@ -5,6 +5,7 @@
  * Uses tRPC authentication with demo account buttons.
  */
 
+import { hostedWorkspace } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -63,10 +64,11 @@ export default function Login() {
   const [, navigate] = useLocation();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [selectedDemo, setSelectedDemo] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState("");
-  const [onesaEnabled, setOnesaEnabled] = useState(false);
+  const [onesaEnabled, setOnesaEnabled] = useState<boolean | null>(null);
   const onesaResult = new URLSearchParams(
     window.location.hash.split("?")[1] || "",
   ).get("onesa");
@@ -76,7 +78,9 @@ export default function Login() {
       .then((enabled) => {
         if (active) setOnesaEnabled(enabled);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (active) setOnesaEnabled(false);
+      });
     return () => {
       active = false;
     };
@@ -115,6 +119,10 @@ export default function Login() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (hostedWorkspace && !selectedDemo) {
+      if (onesaEnabled && onesaResult === "link") await signInWithOnesa(true);
+      return;
+    }
     setError("");
     setIsLoading(true);
 
@@ -139,6 +147,7 @@ export default function Login() {
   };
 
   const fillDemoCredentials = (demoEmail: string, demoPassword: string) => {
+    setSelectedDemo(true);
     setEmail(demoEmail);
     setPassword(demoPassword);
     setError("");
@@ -179,10 +188,10 @@ export default function Login() {
             <p role="status">
               {onesaResult === "link"
                 ? "This email already has a Factory account. Enter its email and password below, then link it to your Onesa account."
-                : "Onesa sign-in did not complete. Try again or use your existing Factory account."}
+                : "Onesa sign-in did not complete. Start shared sign-in again."}
             </p>
           )}
-          {onesaEnabled && (
+          {(hostedWorkspace || onesaEnabled) && (
             <div className="space-y-2">
               <Button
                 type="button"
@@ -192,7 +201,7 @@ export default function Login() {
               >
                 Sign in with Onesa
               </Button>
-              {onesaResult === "link" && (
+              {!hostedWorkspace && onesaResult === "link" && (
                 <Button
                   type="button"
                   variant="outline"
@@ -206,88 +215,111 @@ export default function Login() {
             </div>
           )}
           {/* Login Form */}
-          <form onSubmit={handleLogin} className="space-y-4">
-            {/* Email Field */}
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-foreground font-medium">
-                Email
-              </Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  autoComplete="email"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  maxLength={320}
-                  placeholder="Enter your email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="pl-10 bg-background/50 border-white/20 focus:border-primary"
-                  required
-                  aria-describedby={error ? "login-error" : undefined}
-                />
-              </div>
-            </div>
-
-            {/* Password Field */}
-            <div className="space-y-2">
-              <div>
-                <Label
-                  htmlFor="password"
-                  className="text-foreground font-medium"
-                >
-                  Password
+          {hostedWorkspace && onesaEnabled === false && (
+            <p role="status">
+              The shared sign-in service is not connected. You can retry or
+              manage your account in Company Portal.
+            </p>
+          )}
+          {hostedWorkspace && error && <p role="alert">{error}</p>}
+          {(!hostedWorkspace ||
+            selectedDemo ||
+            (onesaEnabled && onesaResult === "link")) && (
+            <form onSubmit={handleLogin} className="space-y-4">
+              {/* Email Field */}
+              <div className="space-y-2">
+                <Label htmlFor="email" className="text-foreground font-medium">
+                  Email
                 </Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    readOnly={hostedWorkspace && selectedDemo}
+                    type="email"
+                    autoComplete="email"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    maxLength={320}
+                    placeholder="Enter your email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="pl-10 bg-background/50 border-white/20 focus:border-primary"
+                    required
+                    aria-describedby={error ? "login-error" : undefined}
+                  />
+                </div>
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  id="password"
-                  type={showPassword ? "text" : "password"}
-                  autoComplete="current-password"
-                  placeholder="Enter your password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="h-11 md:h-11 pl-10 pr-12 bg-background/50 border-white/20 focus:border-primary"
-                  required
-                />
-                <button
-                  type="button"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                  aria-pressed={showPassword}
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
-                >
-                  {showPassword ? (
-                    <EyeOff className="w-4 h-4" />
-                  ) : (
-                    <Eye className="w-4 h-4" />
-                  )}
-                </button>
-              </div>
-            </div>
 
-            {/* Sign In Button */}
-            {error && (
-              <div id="login-error" role="alert" className="space-y-2 text-sm">
-                <p className="text-destructive">{error}</p>
-                <p className="text-muted-foreground">
-                  If you requested an account, an administrator must approve it
-                  before you can sign in. Password reset does not approve a
-                  pending registration.
-                </p>
+              {/* Password Field */}
+              <div className="space-y-2">
+                <div>
+                  <Label
+                    htmlFor="password"
+                    className="text-foreground font-medium"
+                  >
+                    Password
+                  </Label>
+                </div>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                  <Input
+                    id="password"
+                    readOnly={hostedWorkspace && selectedDemo}
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    placeholder="Enter your password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="h-11 md:h-11 pl-10 pr-12 bg-background/50 border-white/20 focus:border-primary"
+                    required
+                  />
+                  <button
+                    type="button"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-0 top-1/2 flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-colors"
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                </div>
               </div>
-            )}
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-primary hover:bg-primary/80 text-primary-foreground shadow-[0_0_15px_var(--primary)] font-semibold"
-            >
-              {isLoading ? "Signing in..." : "Sign In"}
-            </Button>
-          </form>
+
+              {/* Sign In Button */}
+              {!hostedWorkspace && error && (
+                <div
+                  id="login-error"
+                  role="alert"
+                  className="space-y-2 text-sm"
+                >
+                  <p className="text-destructive">{error}</p>
+                  <p className="text-muted-foreground">
+                    If you requested an account, an administrator must approve
+                    it before you can sign in. Password reset does not approve a
+                    pending registration.
+                  </p>
+                </div>
+              )}
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-primary hover:bg-primary/80 text-primary-foreground shadow-[0_0_15px_var(--primary)] font-semibold"
+              >
+                {isLoading
+                  ? "Signing in..."
+                  : hostedWorkspace && !selectedDemo
+                    ? "Link existing Factory account"
+                    : "Sign In"}
+              </Button>
+            </form>
+          )}
 
           <div className="text-right text-sm">
             <Link
@@ -343,7 +375,7 @@ export default function Login() {
 
           {/* Footer */}
           <div className="mt-6 text-center text-xs text-muted-foreground space-y-1">
-            <p>Protected by Smart Factory Identity Service</p>
+            <p>Account access through Onesa Company Portal</p>
             <p>v1.0.0-stable</p>
           </div>
         </CardContent>

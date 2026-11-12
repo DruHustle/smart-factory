@@ -12,6 +12,7 @@ import { sessionRevoked, revokeSession } from "../accountAccess";
 import { demoAccountsEnabled } from "../../shared/demo-accounts";
 import { sharedDemoIdentity } from "../../shared/access-policy";
 import {
+  portalRequired,
   verifyPortalSession,
   portalDatabase,
   type PortalUser,
@@ -214,6 +215,7 @@ class SDKServer {
       !user ||
       user.disabledAt ||
       (user.loginMethod === "onesa" && !session.onesa) ||
+      (portalRequired() && !session.onesa && !sharedDemoIdentity(user)) ||
       session.authVersion !== user.authVersion ||
       (user.passwordChangeRequired &&
         (!session.credentialChange ||

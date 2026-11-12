@@ -1,4 +1,5 @@
-import { lazy, Suspense } from "react";
+import { hostedWorkspace, portalAccount } from "./lib/portal-account";
+import { lazy, Suspense, useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -91,9 +92,28 @@ function LegacyItem({
   );
 }
 
+function PortalAccountRedirect({ register }: { register: boolean }) {
+  const url = portalAccount + (register ? "/register" : "/security");
+  useEffect(() => {
+    window.location.replace(url);
+  }, [url]);
+  return <a href={url}>Continue to your Onesa account</a>;
+}
+
 function AppRouter() {
   const { user, isLoading, logout } = useAuth();
   const [location] = useHashLocation();
+  const path = location.split("?")[0];
+  if (
+    hostedWorkspace &&
+    [
+      "/register",
+      "/forgot-password",
+      "/reset-password",
+      "/account/password",
+    ].includes(path)
+  )
+    return <PortalAccountRedirect register={path === "/register"} />;
 
   // A recovery link authorizes only the password change. It must also work
   // while another account or a temporary-credential session is signed in.
