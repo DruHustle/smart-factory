@@ -2,7 +2,7 @@
 
 ## Demo buttons are missing
 
-Demo shortcuts come from the API, not frontend constants. Check that `ENABLE_DEMO_ACCOUNTS=true` and PostgreSQL is reachable. When the flag is false, the API hides shortcuts and rejects these demo identities even if old rows remain in PostgreSQL. Restart the API after configuration changes. For a separately hosted frontend, verify `VITE_API_URL` and the exact `ALLOWED_ORIGIN` value without a trailing slash. Buttons are Demo Viewer, Demo Operator, Demo Engineer, and Demo Admin; selecting one fills its shared credential from the API. Enabling this flag in a public production environment exposes fixed credentials, including administrator access; use it only for an intentionally public demonstration tenant without sensitive data or connected equipment.
+Demo shortcuts come from the API, not frontend constants. Check that `ENABLE_DEMO_ACCOUNTS=true` and PostgreSQL is reachable. When the flag is false, the API hides shortcuts and rejects these demo identities even if old rows remain in PostgreSQL. Restart the API after configuration changes. For a separately hosted frontend, verify `VITE_API_URL` and the exact `ALLOWED_ORIGIN` value without a trailing slash. Buttons are Demo Viewer, Demo Operator, Demo Engineer, and Demo Admin; selecting one fills its shared credential from the API. Reserved demo identities share fixed credentials and can read only approved demonstration records. A displayed demo administrator role carries the same read-only limits.
 
 ## Login works but refresh signs out
 
@@ -10,7 +10,7 @@ Enable browser cookies. For separate client and API origins, serve both over HTT
 
 ## Password reset
 
-Forgot Password is a UI placeholder. No reset email or token workflow is implemented.
+On hosted Factory, **Forgot password?** opens Company Portal account security. If the shared identity service is unavailable, check the registered Factory client, issuer and callback using the [hosted identity contract](docs/ONESA_IDENTITY.md). Standalone development supports the verified email or administrator-assisted recovery paths in [account access](docs/account-access.md).
 
 ## Verify the system
 

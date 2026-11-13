@@ -1,10 +1,22 @@
 # Onesa identity contract
 
-The optional Portal connection leaves standalone local-account login available.
-Enable it only after registering a confidential Portal client for product
-`factory` and applying all dashboard migrations through
-`0040_onesa_identity.sql`. Schema source stays in `drizzle/`; local migration
-execution records belong in `local-tools/migrations` at the repository root.
+Hosted Smart Factory uses Company Portal for customer and operator accounts.
+**Sign in with Onesa** starts authorization for the requested Factory screen.
+**Register** leads to the Portal registration page. Password and recovery links
+lead to Portal account security. If the issuer is unavailable, keep the
+hosted workspace unavailable for sign-in and restore the Portal connection.
+
+The hosted browser uses the central account flow on every non-loopback origin.
+The server requires it when `NODE_ENV=production` or
+`ONESA_IDENTITY_ENABLED=true`. Standalone development on loopback can use a
+local account with both conditions off. The explicitly selected demo identities
+exercise the demo experience. An existing Factory user may be asked for one-time
+password proof to link their retained account during the Portal flow.
+
+Before connecting the hosted product, register a confidential client for
+product `factory` with Company Portal and apply all dashboard migrations through
+`0040_onesa_identity.sql`. The schema source lives in `drizzle/`. Keep local migration
+execution records in `local-tools/migrations` at the repository root.
 
 Configure `ONESA_IDENTITY_ENABLED=true`, `ONESA_IDENTITY_ISSUER` (exact HTTPS
 Portal origin plus `/api/v1/identity`), `ONESA_IDENTITY_CLIENT_ID` (16–128 URL-safe
