@@ -1,5 +1,7 @@
 # Account access and session lifecycle
 
+Hosted Smart Factory uses Company Portal for customer registration, sign-in and password recovery. The local signup and recovery procedures below apply to standalone development accounts. Factory still enforces its own roles, demo visibility and session revocation. See the [hosted identity contract](ONESA_IDENTITY.md).
+
 Approved individual accounts retain their database-current roles when selecting **Live**, including on a site that offers shared demo accounts. Reserved walkthrough identities and any individual selecting **Demo** use the central read-only policy. A temporary credential grants only the account/password flow, even when the stored account role is administrator.
 
 ## Sessions

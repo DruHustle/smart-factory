@@ -27,8 +27,9 @@ in ignored `local-tools/`, never in Git.
 
 ## Shared Onesa account sign-in
 
-The dashboard supports optional Portal sign-in alongside its existing local
-accounts. Apply dashboard migration `0040_onesa_identity.sql`, register the exact
+The hosted dashboard uses Company Portal for sign-in, registration and account
+recovery. Standalone development on loopback supports local test accounts.
+Apply dashboard migration `0040_onesa_identity.sql`, register the exact
 HTTPS Factory callback in Portal, and configure the server-only
 `ONESA_IDENTITY_*` values in the frontend component's environment example.
 See [the identity contract](smart-factory-frontend/docs/ONESA_IDENTITY.md).
