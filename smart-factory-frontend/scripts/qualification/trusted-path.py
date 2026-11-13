@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -60,6 +61,32 @@ def stop(process):
     try:process.wait(timeout=10)
     except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait(timeout=5)
 
+def start_ready_worker(argv, cwd, env, logs):
+    # This port is private to the disposable worker and changes at each restart.
+    with socket.socket() as reservation:
+        reservation.bind(('127.0.0.1', 0))
+        port = reservation.getsockname()[1]
+    worker = subprocess.Popen(argv, cwd=cwd, env={**env, 'PORT': str(port)},
+                              stdout=logs, stderr=subprocess.STDOUT, start_new_session=True)
+
+    def alive():
+        if worker.poll() is not None:
+            raise RuntimeError(f'Telemetry worker exited with {worker.returncode} before readiness. See services.log.')
+
+    def ready():
+        alive()
+        with urllib.request.urlopen(f'http://127.0.0.1:{port}/health/ready', timeout=2) as response:
+            confirmed = response.status == 200 and response.read(3) == b'OK'
+        alive()
+        return confirmed
+
+    try:
+        eventually(ready, 'telemetry worker MQTT and database readiness')
+    except BaseException:
+        stop(worker)
+        raise
+    return worker
+
 def main():
     worker=node=None;client=None;state=None;local=None;source_client=None
     output=Path(os.environ.get('QUALIFICATION_EVIDENCE_DIR',tempfile.mkdtemp(prefix='factory-trusted-proof-')))
@@ -82,8 +109,7 @@ def main():
         process=subprocess.Popen(['node','--import','tsx','server/_core/index.ts'],cwd=ROOT,env=env,stdout=logs,stderr=subprocess.STDOUT,start_new_session=True)
         eventually(lambda:http('/health/ready')[0]==200,'Node readiness');return process
     def launch_worker():
-        values={**env,'PORT':'51890'}
-        return subprocess.Popen([dotnet,dll],cwd=BACKEND,env=values,stdout=logs,stderr=subprocess.STDOUT,start_new_session=True)
+        return start_ready_worker([dotnet, dll], BACKEND, env, logs)
     def sql(statement,database='telemetry_trusted_e2e'):
         return subprocess.check_output(COMPOSE+['exec','-T','database','psql','-U','postgres','-d',database,'-At','-c',statement],cwd=ROOT,text=True).strip()
     def snapshot():
@@ -99,11 +125,6 @@ def main():
         run(['node','--import','tsx','scripts/qualification/trusted-fixture.mts','seed'],env=env,stdout=logs,stderr=subprocess.STDOUT)
         run([dotnet,dll,'--migrate'],cwd=BACKEND,env=env,stdout=logs,stderr=subprocess.STDOUT)
         worker=launch_worker()
-        def ready_worker():
-            try:
-                with urllib.request.urlopen('http://127.0.0.1:51890/health/ready',timeout=2)as r:return r.status==200
-            except OSError:return False
-        eventually(ready_worker,'MQTT subscription')
         client=mqtt.Client(mqtt.CallbackAPIVersion.VERSION2,client_id='trusted-path-edge-publisher');client.username_pw_set('review','isolated-review-broker');client.connect('127.0.0.1',51889);client.loop_start()
         eventually(client.is_connected,'publisher connection')
         state=DurableState(str(output/'edge-spool.sqlite3'));publisher=DurablePublisher(client,state)
@@ -188,7 +209,7 @@ def main():
         # A retained delivery acquired while disconnected must remain historical.
         stop(worker);worker=None
         retained=sample(50,power=9);publish(retained,retain=True)
-        worker=launch_worker();eventually(ready_worker,'resubscription')
+        worker=launch_worker()
         eventually(lambda:int(sql('select count(*) from "TelemetryRecords"'))==7 and pending()==0,'retained historical delivery')
         later=sample(-3600000,power=7);publish(later)
         publish(sample(55,power=8,transportRetainVerified=False))
@@ -238,7 +259,7 @@ def main():
             restores.append({'database':database,'tables':verified,'sha256':hashlib.sha256(archive.read_bytes()).hexdigest()})
         env['DATABASE_URL']='postgres://postgres:postgres@127.0.0.1:55452/smart_factory_trusted_restored_e2e'
         env['PostgresConnectionString']=env['PostgresConnectionString'].replace('Database=telemetry_trusted_e2e','Database=telemetry_trusted_restored_e2e')
-        node=launch_node();worker=launch_worker();eventually(ready_worker,'worker readiness on restored databases')
+        node=launch_node();worker=launch_worker()
         assert http('/api/runtime/contract')[1]['schema']['ready'] is True
         passed('disposable dashboard and telemetry backup/restore preserves evidence identities and restarts services',restores=restores)
         evidence['sources']={name:{'sha':subprocess.check_output(['git','rev-parse','HEAD'],cwd=path,text=True).strip(),'dirty':bool(subprocess.check_output(['git','status','--porcelain'],cwd=path,text=True).strip())}for name,path in [('frontend',ROOT),('backend',BACKEND),('edge',EDGE.parents[1])]}
