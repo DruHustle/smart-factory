@@ -17,7 +17,7 @@ New registrations receive `viewer`. Only administrators can assign roles. An adm
 
 ## Demo logins
 
-Set `ENABLE_DEMO_ACCOUNTS=true` to seed and return these login shortcuts to the login page. In production this exposes fixed credentials, including administrator access, so use it only for an isolated demonstration tenant without sensitive data or connected equipment:
+The API exposes these reserved shortcuts when demo account access is enabled with `ENABLE_DEMO_ACCOUNTS=true`. Reserved identities can read approved demonstration records. The displayed role controls the walkthrough view. Operational writes and individual administrator privileges require a separately authorized operator. Demo account setup and fixture seeding are described in [operations](operations.md).
 
 | Login button | Email | Role |
 |---|---|---|
