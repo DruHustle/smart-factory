@@ -1,3 +1,4 @@
+import { nativeClient } from "./nativeAuthorization";
 import { managedConfiguration, verifyManagedGrant } from "./managedIdentity";
 import {
   createCipheriv,
@@ -108,7 +109,7 @@ const assertion = z.object({
   amr: z.array(z.string()),
   onesa_roles: z.array(z.string()),
   onesa_applications: z.array(z.string()),
-  onesa_product_roles: z.object({ factory: z.enum(["user", "admin"]) }),
+  onesa_product_roles: z.object({ factory: z.enum(["user", "admin"]), nativeClient: z.string().optional() }),
 });
 export async function livePortalIdentity(
   config: PortalConfig,
@@ -196,9 +197,11 @@ export async function verifyPortalSession(
   let claim;
   try {
     const saved = z
-      .object({ token: z.string(), role: z.enum(["user", "admin"]) })
+      .object({ token: z.string(), role: z.enum(["user", "admin"]), nativeClient: z.string().optional() })
       .parse(JSON.parse(openGrant(String(row.encrypted_grant))));
-    claim = await livePortalIdentity(config, saved.token);
+    if (saved.nativeClient && (!config.managed || nativeClient(config.client) !== saved.nativeClient))
+      throw new InactivePortalIdentity();
+    claim = await livePortalIdentity(saved.nativeClient ? {...config, client: saved.nativeClient} : config, saved.token);
     if (
       (config.managed?.mappingIssuer || claim.iss) !== row.issuer ||
       claim.sub !== row.subject ||

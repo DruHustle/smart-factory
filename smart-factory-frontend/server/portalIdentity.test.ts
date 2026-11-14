@@ -399,6 +399,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
           expect(
             (options?.body as URLSearchParams).get("code_verifier"),
           ).toMatch(/^[A-Za-z0-9_-]{43}$/);
+          const selected = (options?.body as URLSearchParams).get("client_id") || client;
+          if (selected !== client) {
+            expect(selected).toBe(process.env.ONESA_IDENTITY_NATIVE_CLIENT_ID);
+            expect((options?.body as URLSearchParams).get("redirect_uri")).toBe("eu.onesa.factory://signin/callback");
+            expect(new Headers(options?.headers).has("Authorization")).toBe(false);
+          }
           return Response.json({
             token_type: "Bearer",
             access_token: await token(
@@ -415,7 +421,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
                 email: stableId + "@example.test",
                 email_verified: true,
               },
-              client,
+              selected,
             ),
           });
         },
@@ -452,6 +458,19 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         .getSetCookie()
         .find((v) => v.startsWith(COOKIE_NAME + "="))!
         .split(";")[0];
+      vi.stubEnv("ONESA_IDENTITY_NATIVE_CLIENT_ID","factory-public-mobile");
+      nonce = "n".repeat(43);
+      const nativeExchange = () => request("/api/auth/onesa/native/exchange","",{code:"fixture",verifier:"v".repeat(43),nonce});
+      wrongNonce=true;
+      expect((await nativeExchange()).status).toBe(401);
+      wrongNonce=false;
+      const native=await nativeExchange();
+      expect(native.status).toBe(200);
+      const bearer={headers:{authorization:"Bearer "+(await native.json()).session}} as express.Request;
+      const nativeUser=await sdk.authenticateRequest(bearer);
+      expect(nativeUser.id).toBe(local.id);
+      const nativeCaller=appRouter.createCaller({user:nativeUser,req:bearer,res:{} as any});
+      await expect(nativeCaller.alerts.actionQueue({page:0,pageSize:10})).resolves.toHaveProperty("items");
       outage = true;
       const { user, session } = await authenticate(cookie);
       expect(user.id).toBe(local.id);
