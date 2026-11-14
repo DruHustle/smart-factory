@@ -188,7 +188,9 @@ export default function Login() {
             <p role="status">
               {onesaResult === "link"
                 ? "This email already has a Factory account. Enter its email and password below, then link it to your Onesa account."
-                : "Onesa sign-in did not complete. Start shared sign-in again."}
+                : onesaResult === "mfa"
+                  ? "Your Factory administrator role requires a recent second factor. Sign in with Onesa to continue."
+                  : "Onesa sign-in did not complete. Start shared sign-in again."}
             </p>
           )}
           {(hostedWorkspace || onesaEnabled) && (
@@ -219,7 +221,7 @@ export default function Login() {
             <p role="status">
               The shared sign-in service is not connected. You can retry or{" "}
               <a href={portalSignIn} className="text-primary underline">
-                sign in to Company Portal
+                open your Onesa account
               </a>
               .
             </p>
@@ -378,7 +380,7 @@ export default function Login() {
 
           {/* Footer */}
           <div className="mt-6 text-center text-xs text-muted-foreground space-y-1">
-            <p>Account access through Onesa Company Portal</p>
+            <p>Account access through Onesa Identity</p>
             <p>v1.0.0-stable</p>
           </div>
         </CardContent>

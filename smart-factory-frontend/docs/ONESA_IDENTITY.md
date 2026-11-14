@@ -1,6 +1,6 @@
 # Onesa identity contract
 
-Hosted Smart Factory uses Company Portal for customer and operator accounts.
+Hosted Smart Factory has a legacy Portal provider mode and an opt-in managed Identity mode. The following configuration describes the legacy provider. See **Managed Identity pilot** below for the managed client.
 **Sign in with Onesa** starts authorization for the requested Factory screen.
 **Register** leads to the Portal registration page. Password and recovery links
 lead to Portal account security. If the issuer is unavailable, keep the
@@ -74,3 +74,12 @@ These tests prove the application boundary with a synthetic issuer and the brows
 flow with controlled responses. Real Portal pairing, TLS configuration and provider
 deployment must be recorded separately against the same final revisions. Hardware
 telemetry qualification remains an independent requirement.
+
+
+## Managed Identity pilot
+
+Set `ONESA_IDENTITY_ENABLED=true` with the issuer `https://auth.onesa.eu/`, the registered confidential client ID and secret, exact `/api/auth/onesa/callback` URI and existing public dashboard origin. Set `ONESA_IDENTITY_AUDIENCE` to the Factory API identifier (proposed `https://api.factory.onesa.eu`), `ONESA_IDENTITY_ACCOUNT_ORIGIN` to the central Identity UI and `ONESA_IDENTITY_PUBLIC_JWKS` to the managed issuer’s trusted public current/next RS256 signing keys. Stage replacement keys before enabling their use. The callback uses code + S256 and verifies the signed ID token nonce and the signed access token. Only the Factory grant and `user` role authorize entry. Factory retains its own role and equipment permissions. An approved local admin additionally needs an MFA timestamp within 300 seconds.
+
+Configure `ONESA_IDENTITY_MAPPING_ISSUER` to the exact old Portal issuer already used by verified Factory links in this environment. The managed issuer’s signed stable Onesa UUID maps to that existing identity. For unlinked accounts the existing dual-authentication flow proves local ownership. Existing subject links, operator recovery access, equipment identity and control-plane credentials remain owned by Factory.
+
+During an Identity outage, an issued session is bounded by its locally validated signed grant (maximum 300 seconds) including after API restart with the configured keys. New login, renewal through sign-in and fresh factor verification require service recovery. Local deactivation and authorization remain in force during that period. A new authorization code is required after expiry. `ONESA_IDENTITY_AUDIENCE` must remain unset for the legacy provider during pre-cutover operation or rollback; sessions using the other token format will require sign-in again. Record and reconcile local changes before reverting issuer settings.
