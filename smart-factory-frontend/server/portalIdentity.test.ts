@@ -16,7 +16,13 @@ import { changeUserAccess } from "./accountAccess";
 import { createUser } from "./db";
 import { COOKIE_NAME } from "../shared/const";
 import { disposableDatabase } from "./test/disposableDatabase";
-import { SignJWT, decodeJwt, jwtVerify } from "jose";
+import {
+  SignJWT,
+  decodeJwt,
+  jwtVerify,
+  generateKeyPair,
+  exportJWK,
+} from "jose";
 import { ENV } from "./_core/env";
 
 it("rejects unsafe destinations and incomplete identity configuration", () => {
@@ -338,5 +344,134 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         await expect(authenticate(signedIn.cookie)).rejects.toThrow();
       },
     );
+    it("reuses verified Factory ownership, checks signed resource and nonce, and reads locally during a managed Identity outage", async () => {
+      const managedIssuer = "https://auth.onesa.test/";
+      const audience = "https://api.factory.onesa.eu";
+      const client = "factory-test-client";
+      const { privateKey, publicKey } = await generateKeyPair("RS256");
+      const key = {
+        ...(await exportJWK(publicKey)),
+        kid: "factory-test",
+        alg: "RS256",
+      };
+      const stableId = randomUUID();
+      const local = await createUser({
+        openId: randomUUID(),
+        name: "Commissioning engineer",
+        email: stableId + "@example.test",
+        role: "engineer",
+        loginMethod: "onesa",
+      });
+      const db = await portalDatabase();
+      await db.execute(
+        sql`INSERT INTO onesa_factory_links(issuer,subject,user_id,local_access_approved) VALUES(${issuer},${stableId}::uuid,${local.id},true)`,
+      );
+      for (const [name, value] of Object.entries({
+        ONESA_IDENTITY_ISSUER: managedIssuer,
+        ONESA_IDENTITY_AUDIENCE: audience,
+        ONESA_IDENTITY_CLIENT_ID: client,
+        ONESA_IDENTITY_MAPPING_ISSUER: issuer,
+        ONESA_IDENTITY_ACCOUNT_ORIGIN: "https://identity.onesa.test",
+        ONESA_IDENTITY_PUBLIC_JWKS: JSON.stringify({ keys: [key] }),
+      }))
+        vi.stubEnv(name, value);
+      let nonce = "",
+        wrongNonce = false,
+        outage = false,
+        wrongAudience = false;
+      const providerSubject = "auth0|test-owner";
+      const ns = "https://onesa.eu/claims/";
+      const token = (payload: Record<string, unknown>, target: string) =>
+        new SignJWT(payload)
+          .setProtectedHeader({ alg: "RS256", kid: key.kid })
+          .setSubject(providerSubject)
+          .setAudience(target)
+          .setIssuer(managedIssuer)
+          .setIssuedAt()
+          .setExpirationTime("4m")
+          .sign(privateKey);
+      vi.stubGlobal(
+        "fetch",
+        async (input: RequestInfo | URL, options?: RequestInit) => {
+          if (String(input) !== managedIssuer + "oauth/token")
+            return actualFetch(input, options);
+          if (outage) return new Response(null, { status: 503 });
+          expect(
+            (options?.body as URLSearchParams).get("code_verifier"),
+          ).toMatch(/^[A-Za-z0-9_-]{43}$/);
+          return Response.json({
+            token_type: "Bearer",
+            access_token: await token(
+              {
+                [ns + "user_id"]: stableId,
+                [ns + "roles"]: ["user"],
+                [ns + "products"]: ["factory"],
+              },
+              wrongAudience ? "https://api.other.test" : audience,
+            ),
+            id_token: await token(
+              {
+                nonce: wrongNonce ? "wrong" : nonce,
+                email: stableId + "@example.test",
+                email_verified: true,
+              },
+              client,
+            ),
+          });
+        },
+      );
+      const run = async () => {
+        const start = await request("/api/auth/onesa/start", "", {
+          returnTo: "#/monitoring?asset=17",
+        });
+        expect(start.status).toBe(200);
+        const url = new URL((await start.json()).url);
+        expect(url.origin + "/").toBe(managedIssuer);
+        expect(url.searchParams.get("audience")).toBe(audience);
+        expect(url.searchParams.get("code_challenge_method")).toBe("S256");
+        expect(url.searchParams.has("acr_values")).toBe(false);
+        nonce = url.searchParams.get("nonce")!;
+        const browser = start.headers.getSetCookie()[0].split(";")[0];
+        return request(
+          "/api/auth/onesa/callback?code=synthetic-code&state=" +
+            url.searchParams.get("state"),
+          browser,
+        );
+      };
+      wrongNonce = true;
+      expect((await run()).headers.get("location")).toContain("onesa=denied");
+      wrongNonce = false;
+      wrongAudience = true;
+      expect((await run()).headers.get("location")).toContain("onesa=denied");
+      wrongAudience = false;
+      const result = await run();
+      expect(result.headers.get("location")).toBe(
+        origin + "/#/monitoring?asset=17",
+      );
+      const cookie = result.headers
+        .getSetCookie()
+        .find((v) => v.startsWith(COOKIE_NAME + "="))!
+        .split(";")[0];
+      outage = true;
+      const { user, session } = await authenticate(cookie);
+      expect(user.id).toBe(local.id);
+      expect(user.role).toBe("engineer");
+      expect(user.onesaAccessPending).toBe(false);
+      const caller = appRouter.createCaller({
+        user,
+        session,
+        req: { headers: { cookie } } as any,
+        res: {} as any,
+      });
+      await expect(caller.assets.list()).resolves.toBeDefined();
+      expect((await run()).headers.get("location")).toContain(
+        "onesa=unavailable",
+      );
+      expect(
+        (await request("/api/auth/onesa/account/register")).headers.get(
+          "location",
+        ),
+      ).toBe("https://identity.onesa.test/register");
+    });
   },
 );

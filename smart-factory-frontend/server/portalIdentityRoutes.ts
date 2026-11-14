@@ -28,7 +28,39 @@ const cookieOptions = {
   sameSite: "lax" as const,
   path: "/",
 };
+class FactoryMfaRequired extends Error {}
 export function installPortalIdentity(app: Express) {
+  app.get("/api/auth/onesa/account/:page", (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const page = req.params.page;
+    if (!["login", "register", "security"].includes(page))
+      return res.sendStatus(404);
+    try {
+      const config = portalConfig();
+      if (process.env.ONESA_IDENTITY_AUDIENCE && !config?.managed)
+        return res.sendStatus(503);
+      if (config?.managed)
+        return res.redirect(
+          303,
+          config.managed.accountOrigin +
+            (page === "register" ? "/register" : "/account"),
+        );
+      const legacy =
+        config?.issuer.replace(/\/api\/v1\/identity$/, "") ||
+        "https://portal.onesa.eu";
+      return res.redirect(
+        303,
+        legacy +
+          (page === "security"
+            ? "/account/security"
+            : page === "register"
+              ? "/admin?entry=register"
+              : "/admin"),
+      );
+    } catch {
+      return res.sendStatus(503);
+    }
+  });
   app.get("/api/auth/onesa/config", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try {
@@ -46,6 +78,7 @@ export function installPortalIdentity(app: Express) {
       const input = z
         .object({
           returnTo: z.string().max(2048).optional(),
+          stepUp: z.literal(true).optional(),
           link: z
             .object({
               email: z.email().max(320),
@@ -74,6 +107,7 @@ export function installPortalIdentity(app: Express) {
         }
       }
       const db = await portalDatabase();
+      let stepUp = !!input.data.stepUp;
       let linkUserId: number | null = null,
         linkVersion: number | null = null;
       if (input.data.link) {
@@ -95,6 +129,7 @@ export function installPortalIdentity(app: Express) {
           return res
             .status(401)
             .json({ error: "Could not confirm this local Factory account." });
+        stepUp ||= user.role === "admin";
         linkUserId = user.id;
         linkVersion = user.authVersion;
       }
@@ -116,11 +151,26 @@ export function installPortalIdentity(app: Express) {
         client_id: config.client,
         redirect_uri: config.redirect,
         state,
-        nonce: randomValue(),
+        nonce: digest("factory-nonce:" + verifier),
         code_challenge: digest(verifier),
         code_challenge_method: "S256",
       });
-      return res.json({ url: config.issuer + "/auth?" + params });
+      if (config.managed) {
+        params.set("audience", config.managed.audience);
+        params.set("scope", "openid email profile");
+        if (stepUp) {
+          params.set("prompt", "login");
+          params.set("max_age", "0");
+          params.set(
+            "acr_values",
+            "http://schemas.openid.net/pape/policies/2007/06/multi-factor",
+          );
+        }
+      }
+      return res.json({
+        url:
+          config.issuer + (config.managed ? "authorize?" : "/auth?") + params,
+      });
     } catch {
       return res
         .status(503)
@@ -150,7 +200,8 @@ export function installPortalIdentity(app: Express) {
     const query = z
       .object({
         state: z.string().regex(/^[A-Za-z0-9_-]{43}$/),
-        code: z.string().min(1).max(4096),
+        code: z.string().min(1).max(4096).optional(),
+        error: z.string().max(256).optional(),
         iss: z.literal(config.issuer).optional(),
       })
       .safeParse(req.query);
@@ -165,9 +216,14 @@ export function installPortalIdentity(app: Express) {
       if (!txn) return retry("restart");
       returnTo = safeReturnPath(txn.return_to);
       res.clearCookie(cookieName, cookieOptions);
+      if (!query.data.code || query.data.error) return retry("unavailable");
       const exchange = z
         .object({
-          access_token: z.string().min(20).max(4096),
+          access_token: z
+            .string()
+            .min(20)
+            .max(config.managed ? 12000 : 4096),
+          id_token: z.string().max(12000).optional(),
           token_type: z.string().regex(/^bearer$/i),
         })
         .parse(
@@ -182,13 +238,33 @@ export function installPortalIdentity(app: Express) {
             }),
           ),
         );
-      const claim = await livePortalIdentity(config, exchange.access_token);
+      const token = config.managed
+        ? JSON.stringify({
+            access_token: exchange.access_token,
+            id_token: exchange.id_token,
+          })
+        : exchange.access_token;
+      const claim = await livePortalIdentity(
+        config,
+        token,
+        digest("factory-nonce:" + String(txn.verifier)),
+      );
+      const bindingIssuer = config.managed?.mappingIssuer || claim.iss;
+      const adminAllowed = config.managed
+        ? claim.amr.includes("mfa") &&
+          Math.floor(Date.now() / 1000) - claim.auth_time <= 300
+        : claim.onesa_product_roles.factory === "admin";
+      const checkAdmin = (role: string) => {
+        if (role !== "admin" || adminAllowed) return;
+        if (config.managed) throw new FactoryMfaRequired();
+        throw new InactivePortalIdentity();
+      };
       const result = await db.transaction(async (tx) => {
         await tx.execute(
-          sql`SELECT pg_advisory_xact_lock(hashtextextended(${claim.iss + ":" + claim.sub},0))`,
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${bindingIssuer + ":" + claim.sub},0))`,
         );
         let [link] = await tx.execute(
-          sql`SELECT user_id FROM onesa_factory_links WHERE issuer=${claim.iss} AND subject=${claim.sub}::uuid`,
+          sql`SELECT user_id FROM onesa_factory_links WHERE issuer=${bindingIssuer} AND subject=${claim.sub}::uuid`,
         );
         if (txn.link_user_id !== null) {
           const [local] = await tx
@@ -202,16 +278,15 @@ export function installPortalIdentity(app: Express) {
             local.passwordChangeRequired ||
             local.authVersion !== Number(txn.link_version) ||
             local.email?.toLowerCase() !== claim.email.toLowerCase() ||
-            sharedDemoIdentity(local) ||
-            (local.role === "admin" &&
-              claim.onesa_product_roles.factory !== "admin")
+            sharedDemoIdentity(local)
           )
             throw new InactivePortalIdentity();
+          checkAdmin(local.role);
           await tx.execute(
-            sql`INSERT INTO onesa_factory_links(issuer,subject,user_id,local_access_approved) VALUES(${claim.iss},${claim.sub}::uuid,${local.id},true) ON CONFLICT DO NOTHING`,
+            sql`INSERT INTO onesa_factory_links(issuer,subject,user_id,local_access_approved) VALUES(${bindingIssuer},${claim.sub}::uuid,${local.id},true) ON CONFLICT DO NOTHING`,
           );
           [link] = await tx.execute(
-            sql`SELECT user_id FROM onesa_factory_links WHERE issuer=${claim.iss} AND subject=${claim.sub}::uuid`,
+            sql`SELECT user_id FROM onesa_factory_links WHERE issuer=${bindingIssuer} AND subject=${claim.sub}::uuid`,
           );
           if (!link || Number(link.user_id) !== local.id)
             throw new InactivePortalIdentity();
@@ -220,7 +295,7 @@ export function installPortalIdentity(app: Express) {
           const [created] = await tx
             .insert(users)
             .values({
-              openId: "onesa-" + digest(claim.iss + ":" + claim.sub),
+              openId: "onesa-" + digest(bindingIssuer + ":" + claim.sub),
               name: claim.name,
               email: claim.email.toLowerCase(),
               password: null,
@@ -231,7 +306,7 @@ export function installPortalIdentity(app: Express) {
             .returning();
           if (!created) return null;
           await tx.execute(
-            sql`INSERT INTO onesa_factory_links(issuer,subject,user_id,local_access_approved) VALUES(${claim.iss},${claim.sub}::uuid,${created.id},false)`,
+            sql`INSERT INTO onesa_factory_links(issuer,subject,user_id,local_access_approved) VALUES(${bindingIssuer},${claim.sub}::uuid,${created.id},false)`,
           );
           link = { user_id: created.id };
         }
@@ -239,16 +314,11 @@ export function installPortalIdentity(app: Express) {
           .select()
           .from(users)
           .where(eq(users.id, Number(link.user_id)));
-        if (
-          !user ||
-          user.disabledAt ||
-          (user.role === "admin" &&
-            claim.onesa_product_roles.factory !== "admin")
-        )
-          throw new InactivePortalIdentity();
+        if (!user || user.disabledAt) throw new InactivePortalIdentity();
+        checkAdmin(user.role);
         const sessionId = randomUUID();
         await tx.execute(
-          sql`INSERT INTO onesa_factory_sessions(session_id,user_id,encrypted_grant,expires_at) VALUES(${sessionId}::uuid,${user.id},${sealGrant(JSON.stringify({ token: exchange.access_token, role: claim.onesa_product_roles.factory }))},to_timestamp(${claim.exp}))`,
+          sql`INSERT INTO onesa_factory_sessions(session_id,user_id,encrypted_grant,expires_at) VALUES(${sessionId}::uuid,${user.id},${sealGrant(JSON.stringify({ token, role: claim.onesa_product_roles.factory }))},to_timestamp(${claim.exp}))`,
         );
         return { user, sessionId };
       });
@@ -269,7 +339,11 @@ export function installPortalIdentity(app: Express) {
       );
     } catch (error) {
       return retry(
-        error instanceof InactivePortalIdentity ? "denied" : "unavailable",
+        error instanceof FactoryMfaRequired
+          ? "mfa"
+          : error instanceof InactivePortalIdentity
+            ? "denied"
+            : "unavailable",
       );
     }
   });
