@@ -21,6 +21,7 @@ import {
   sealGrant,
 } from "./portalIdentity";
 
+import { exchangeNativeCode, nativeClient, nativeRedirect, nativeRequest } from "./nativeAuthorization";
 const cookieName = "__Host-onesa_factory_login";
 const cookieOptions = {
   secure: true,
@@ -30,6 +31,46 @@ const cookieOptions = {
 };
 class FactoryMfaRequired extends Error {}
 export function installPortalIdentity(app: Express) {
+  app.get("/api/auth/onesa/native/config", (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const config = portalConfig();
+    const client = config?.managed && nativeClient(config.client);
+    if (!config?.managed || !client) return res.sendStatus(503);
+    return res.json({issuer: config.issuer, audience: config.managed.audience, client, redirect: nativeRedirect});
+  });
+  app.post("/api/auth/onesa/native/exchange", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const input = nativeRequest.safeParse(req.body);
+    if (!input.success) return res.sendStatus(400);
+    try {
+      const config = portalConfig();
+      const client = config?.managed && nativeClient(config.client);
+      if (!config?.managed || !client) return res.sendStatus(503);
+      const attempts = await recordLoginAttempt(digest("onesa-native:" + (req.ip || "unknown")), 15 * 60_000);
+      if (attempts.attempts > 15) return res.sendStatus(429);
+      const tokens = await exchangeNativeCode(config.issuer, client, input.data);
+      if (!tokens) return res.sendStatus(401);
+      const token = JSON.stringify({access_token: tokens.access_token, id_token: tokens.id_token});
+      const claim = await livePortalIdentity({...config, client}, token, input.data.nonce);
+      const db = await portalDatabase();
+      const [link] = await db.execute(sql`SELECT user_id FROM onesa_factory_links
+        WHERE issuer=${config.managed.mappingIssuer} AND subject=${claim.sub}::uuid AND local_access_approved`);
+      if (!link) return res.sendStatus(403);
+      const [user] = await db.select().from(users).where(eq(users.id, Number(link.user_id)));
+      if (!user || user.disabledAt || user.passwordChangeRequired || sharedDemoIdentity(user) ||
+          (user.role === "admin" && (!claim.amr.includes("mfa") || Date.now()/1000 - claim.auth_time > 300)))
+        return res.sendStatus(403);
+      const sessionId = randomUUID();
+      const grant = sealGrant(JSON.stringify({token, role: claim.onesa_product_roles.factory, nativeClient: client}));
+      await db.execute(sql`INSERT INTO onesa_factory_sessions(session_id,user_id,encrypted_grant,expires_at)
+        VALUES(${sessionId}::uuid,${user.id},${grant},to_timestamp(${claim.exp}))`);
+      return res.json({session: await sdk.createSessionToken(user, {
+        sessionId, expiresInMs: claim.exp*1000 - Date.now(), onesa: true,
+      })});
+    } catch (error) {
+      return res.sendStatus(error instanceof InactivePortalIdentity ? 401 : 503);
+    }
+  });
   app.get("/api/auth/onesa/account/:page", (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const page = req.params.page;
