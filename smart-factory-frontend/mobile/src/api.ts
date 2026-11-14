@@ -35,7 +35,7 @@ export type Item = {
 };
 export type Detail = { item: Item; history: string[] };
 
-const trpc = async (
+export const trpc = async (
   session: string,
   name: string,
   input: unknown,
