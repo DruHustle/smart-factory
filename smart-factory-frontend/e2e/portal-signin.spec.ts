@@ -39,3 +39,15 @@ test("a pending Portal account displays approval status, requests no factory rec
   await expect(page.getByRole("button",{name:"Sign in with Onesa",exact:true})).toBeVisible();
   expect(calls).toContain("auth.logout");
 });
+
+test("hosted Factory offers the canonical Portal when its issuer is offline", async ({ page, baseURL }) => {
+  await fixture(page);
+  await page.route("**/api/auth/onesa/config", route => route.fulfill({ status: 503, json: {} }));
+  await page.route("https://portal.onesa.eu/**", route => route.fulfill({ contentType: "text/html", body: "<h1>Company Portal fixture</h1>" }));
+  const hosted = new URL("/#/monitoring", baseURL);
+  hosted.hostname = "factory.localhost";
+  await page.goto(hosted.href);
+  await expect(page.getByRole("link", { name: "sign in to Company Portal" })).toHaveAttribute("href", "https://portal.onesa.eu/admin");
+  await page.getByRole("link", { name: "Register", exact: true }).click();
+  await expect(page).toHaveURL("https://portal.onesa.eu/admin?entry=register");
+});
