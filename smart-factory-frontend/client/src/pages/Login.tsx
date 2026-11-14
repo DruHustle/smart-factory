@@ -5,7 +5,7 @@
  * Uses tRPC authentication with demo account buttons.
  */
 
-import { hostedWorkspace } from "@/lib/portal-account";
+import { hostedWorkspace, portalSignIn } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -217,8 +217,11 @@ export default function Login() {
           {/* Login Form */}
           {hostedWorkspace && onesaEnabled === false && (
             <p role="status">
-              The shared sign-in service is not connected. You can retry or
-              manage your account in Company Portal.
+              The shared sign-in service is not connected. You can retry or{" "}
+              <a href={portalSignIn} className="text-primary underline">
+                sign in to Company Portal
+              </a>
+              .
             </p>
           )}
           {hostedWorkspace && error && <p role="alert">{error}</p>}
