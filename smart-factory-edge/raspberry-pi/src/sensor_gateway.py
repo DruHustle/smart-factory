@@ -39,6 +39,8 @@ except Exception:  # pragma: no cover
 STOP = Event()
 INGRESS_FAILED = Event()
 MAX_EPOCH_MILLISECONDS = 9_223_372_036_854_775_807
+MAX_METRIC_MAGNITUDE = 1_000_000_000
+MAX_NAMED_SIGNAL_MAGNITUDE = 4_294_967_295
 WROVER_CONTROL_PINS = {18}
 GATEWAY_SESSION = str(uuid.uuid4())
 OBSERVATION_SEQUENCE = count()
@@ -116,7 +118,7 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
         return False
     for key in {"temperature", "humidity", "vibration", "power", "pressure", "rpm"} & record.keys():
         value = record[key]
-        if value is not None and not _finite_number(value):
+        if value is not None and (not _finite_number(value) or abs(value) > MAX_METRIC_MAGNITUDE):
             return False
         # Relative humidity is a percentage for both the DHT11 and generic
         # industrial telemetry contract. Values outside this physical range
@@ -148,7 +150,7 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
         for name, value in signals.items():
             if not isinstance(name, str) or not name or len(name) > 64:
                 return False
-            if not _finite_number(value):
+            if not _finite_number(value) or abs(value) > MAX_NAMED_SIGNAL_MAGNITUDE:
                 return False
     return True
 
