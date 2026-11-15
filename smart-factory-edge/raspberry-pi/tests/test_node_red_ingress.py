@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from config import load_settings
-from sensor_gateway import forward_local_message, telemetry_topic, heartbeat_topic
+from sensor_gateway import forward_local_message, forward_local_control_ack, telemetry_topic, heartbeat_topic, encoded_topic
 
 
 class NodeRedTrustBoundaryTests(unittest.TestCase):
@@ -127,6 +127,53 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
                 })
                 self.assertFalse(accepted)
                 self.assertEqual(messages, [])
+
+    def test_oversized_mapping_integer_is_rejected_without_gateway_restart(self):
+        # A bounded MQTT packet can contain a large JSON integer that makes
+        # math.isfinite(int) raise OverflowError if bounds are checked last.
+        accepted, messages = self.publish({
+            "deviceId": "node-red-source-01",
+            "timestamp": 1793066400000,
+            "pressure": 3.0,
+            "units": {"pressure": "bar"},
+            "mapping": {"pressure": {
+                "rawValue": 10 ** 500,
+                "rawUnit": "register",
+                "scale": 1.0,
+                "offset": 0.0,
+                "version": "sf-mapping-v1",
+            }},
+        })
+        self.assertFalse(accepted)
+        self.assertEqual(messages, [])
+
+    def test_untrusted_control_ack_status_is_rejected_without_gateway_restart(self):
+        settings = self.settings()
+        settings.local_mqtt_control_device_ids = ("wrover-01",)
+        topic = encoded_topic("fixture", "line", "wrover-01", "control-ack")
+        base_ack = {
+            "deviceId": "wrover-01",
+            "commandId": "command-123",
+            "timestamp": 1793066400000,
+            "status": "applied",
+        }
+        forwarded = []
+        cloud = types.SimpleNamespace(publish=lambda *args, **kwargs:
+            forwarded.append((args, kwargs)) or types.SimpleNamespace(rc=0))
+        for invalid in ([], {}, None, False, 1.5):
+            with self.subTest(status=invalid):
+                msg = types.SimpleNamespace(
+                    topic=topic,
+                    payload=json.dumps({**base_ack, "status": invalid}).encode(),
+                    retain=False,
+                )
+                self.assertFalse(forward_local_control_ack(settings, cloud, msg))
+                self.assertEqual(forwarded, [])
+        valid = types.SimpleNamespace(
+            topic=topic, payload=json.dumps(base_ack).encode(), retain=False,
+        )
+        self.assertTrue(forward_local_control_ack(settings, cloud, valid))
+        self.assertEqual(len(forwarded), 1)
 
     def test_explicitly_commissioned_source_still_preserves_broker_retention(self):
         payload = {
