@@ -657,7 +657,7 @@ def make_mqtt_client(settings, apply_configuration=None, relay_control=None, rel
 def parse_serial_line(line: str) -> dict:
     if len(line.encode("utf-8")) > 16*1024:
         raise ValueError("invalid_telemetry:bytes")
-    record = json.loads(line)
+    record = json.loads(line, object_pairs_hook=_unique_json_object)
     if not isinstance(record,dict):
         raise ValueError("invalid_telemetry:object")
     if "timestamp" not in record:
