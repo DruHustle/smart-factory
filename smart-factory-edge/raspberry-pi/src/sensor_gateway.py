@@ -338,7 +338,7 @@ def forward_local_control_ack(settings, cloud_client, msg, transport_verified=Fa
         return False
     if isinstance(timestamp, bool) or not isinstance(timestamp, int) or not 0 < timestamp <= MAX_EPOCH_MILLISECONDS:
         return False
-    if ack.get("status") not in {"applied", "rejected", "duplicate_ignored"}:
+    if not isinstance(ack.get("status"), str) or ack["status"] not in {"applied", "rejected", "duplicate_ignored"}:
         return False
     if ack.get("action") == "configure_mqtt_qos":
         required = {"action", "deviceId", "commandId", "status", "timestamp", "revision", "requestedRevision", "uplinkQos", "downlinkQos"}
