@@ -121,16 +121,12 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
     if kind == "heartbeat":
         return set(record) == {"deviceId", "timestamp", "status"} and isinstance(record.get("status"), str) and record["status"] in {"online", "offline"}
 
-    allowed = {"deviceId", "timestamp", "temperature", "humidity", "vibration", "power", "pressure", "rpm", "sensorType", "sensorStatus", "assetId", "assetSignals", "integration", "units", "observation", "mapping"}
+    allowed = {"deviceId", "timestamp", "temperature", "humidity", "vibration", "power", "pressure", "rpm", "sensorType", "sensorStatus", "assetId", "assetSignals", "units", "observation", "mapping"}
     if any(key not in allowed for key in record):
         return False
     if "units" in record and not valid_units(record["units"]): return False
     if "observation" in record and not source_observation(record["observation"]): return False
     if "mapping" in record and not valid_mapping(record["mapping"],record.get("units",{}),record): return False
-    try:
-        normalize_provenance(record.get("integration"))
-    except ValueError:
-        return False
     for key in {"temperature", "humidity", "vibration", "power", "pressure", "rpm"} & record.keys():
         value = record[key]
         if value is not None and (not _finite_number(value) or abs(value) > MAX_METRIC_MAGNITUDE):
