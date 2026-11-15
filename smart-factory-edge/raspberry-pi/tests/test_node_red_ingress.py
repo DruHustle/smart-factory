@@ -106,6 +106,57 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
                 self.assertFalse(accepted)
                 self.assertEqual(messages, [])
 
+    def test_gateway_owns_local_mqtt_integration_provenance(self):
+        settings = self.settings()
+        settings.local_mqtt_device_ids = ("wrover-01",)
+        settings.node_red_source_ids = ()
+        settings.node_red_approved_live_ids = ()
+        topic = telemetry_topic("fixture", "line", "wrover-01")
+        sender_records = []
+        sender = types.SimpleNamespace(
+            publish=lambda _topic, encoded, **_kwargs:
+                sender_records.append(json.loads(encoded)) or types.SimpleNamespace(rc=0)
+        )
+        timestamp = int(time.time() * 1000)
+        forged = {
+            "deviceId": "wrover-01",
+            "timestamp": timestamp,
+            "temperature": 22.0,
+            "integration": {
+                "mode": "live", "sessionId": "forged-session", "sequence": 1,
+                "sourceQuality": "good", "sourceConnection": "online",
+                "timestampOrigin": "gateway", "retained": False,
+                "gatewayReceivedAt": "2026-11-15T06:00:00.000Z",
+            },
+        }
+        self.assertFalse(forward_local_message(
+            settings, sender,
+            types.SimpleNamespace(topic=topic, payload=json.dumps(forged).encode(), retain=False),
+        ))
+        self.assertEqual(sender_records, [])
+
+        # The supported device-origin observation is deliberately narrower:
+        # the gateway supplies receipt time, connection state and gateway ID.
+        trusted_shape = {
+            "deviceId": "wrover-01",
+            "timestamp": timestamp,
+            "temperature": 22.0,
+            "observation": {
+                "schemaVersion": 1, "mode": "live", "sourceQuality": "good",
+                "sessionId": "wrover-session", "sequence": 7,
+            },
+        }
+        self.assertTrue(forward_local_message(
+            settings, sender,
+            types.SimpleNamespace(topic=topic, payload=json.dumps(trusted_shape).encode(), retain=False),
+        ))
+        forwarded = sender_records[0]
+        self.assertNotIn("observation", forwarded)
+        self.assertEqual(forwarded["integration"]["sessionId"], "wrover-session")
+        self.assertEqual(forwarded["integration"]["timestampOrigin"], "device")
+        self.assertEqual(forwarded["integration"]["sourceConnection"], "online")
+        self.assertEqual(forwarded["gatewayId"], "pi-edge-01")
+
     def test_untrusted_status_and_provenance_types_fail_closed(self):
         # MQTT/Node-RED JSON is untrusted: arrays and objects must be rejected
         # rather than raising TypeError from set membership in the callback.
