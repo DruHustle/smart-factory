@@ -244,6 +244,9 @@ export default function NodeRedPackages() {
                 {review.description && (
                   <p className="text-sm">{review.description}</p>
                 )}
+                <p className="break-all text-xs text-muted-foreground">
+                  Verified npm SHA-512 integrity: <code>{review.integrity}</code>
+                </p>
                 <p className="text-sm">
                   Declared by the package: {review.nodeSets.length} node sets
                   and {review.pluginSets.length} plugin sets.
