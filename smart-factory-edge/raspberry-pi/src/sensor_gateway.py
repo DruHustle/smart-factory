@@ -215,7 +215,7 @@ def validate_gpio_command(settings, command: dict) -> dict:
         raise ValueError("GPIO command fields are invalid")
     if len(json.dumps(command, separators=(",", ":")).encode("utf-8")) > 512:
         raise ValueError("GPIO command exceeds the supported size")
-    if command.get("schemaVersion") != 1 or command.get("action") != "set_gpio":
+    if type(command.get("schemaVersion")) is not int or command["schemaVersion"] != 1 or command.get("action") != "set_gpio":
         raise ValueError("GPIO command action or schema is unsupported")
     command_id = command.get("commandId")
     target = command.get("targetDeviceId")
