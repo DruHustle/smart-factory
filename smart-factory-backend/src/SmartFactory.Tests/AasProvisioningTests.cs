@@ -138,6 +138,44 @@ public sealed class AasProvisioningTests
     }
 
     [Fact]
+    public async Task ConcurrentRevisionWritersCannotOverwriteOneAnother()
+    {
+        var handler = new RevisionHandler(synchronizeConcurrentUpdates: true);
+        var firstService = CreateService(handler);
+        var secondService = CreateService(handler);
+        await firstService.CreateAsync(Asset(), CancellationToken.None);
+
+        var firstRevision = Asset() with { AasVersion = 2, ExpectedAasVersion = 1, ManufacturerStreet = "Writer A Street" };
+        var secondRevision = Asset() with { AasVersion = 2, ExpectedAasVersion = 1, ManufacturerStreet = "Writer B Street" };
+
+        async Task<bool> TryUpdate(AasProvisioningService service, AssetProvisionRequest request)
+        {
+            try
+            {
+                await service.UpdateAsync(request, CancellationToken.None);
+                return true;
+            }
+            catch (AasVersionConflictException)
+            {
+                return false;
+            }
+        }
+
+        var outcomes = await Task.WhenAll(
+            TryUpdate(firstService, firstRevision),
+            TryUpdate(secondService, secondRevision));
+
+        Assert.Single(outcomes, succeeded => succeeded);
+        Assert.Single(outcomes, succeeded => !succeeded);
+        Assert.Contains(handler.Resources.Values, body =>
+            body.Contains("Writer A Street", StringComparison.Ordinal) ||
+            body.Contains("Writer B Street", StringComparison.Ordinal));
+        Assert.DoesNotContain(handler.Resources.Values, body =>
+            body.Contains("Writer A Street", StringComparison.Ordinal) &&
+            body.Contains("Writer B Street", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public void RejectsMissingRequiredManufacturerAddress()
     {
         Assert.Throws<ArgumentException>(() => AasDocumentsBuilder.Build(Asset() with { ManufacturerStreet = "" }));
@@ -191,47 +229,86 @@ public sealed class AasProvisioningTests
         public Microsoft.Extensions.FileProviders.IFileProvider ContentRootFileProvider { get; set; } = new Microsoft.Extensions.FileProviders.NullFileProvider();
     }
 
-    private sealed class RevisionHandler : HttpMessageHandler
+    private sealed class RevisionHandler(bool synchronizeConcurrentUpdates = false) : HttpMessageHandler
     {
-        private readonly Dictionary<string, string> resources = new(StringComparer.Ordinal);
-        public IReadOnlyDictionary<string, string> Resources => resources;
+        private readonly object gate = new();
+        private readonly Dictionary<string, StoredResource> resources = new(StringComparer.Ordinal);
+        private readonly TaskCompletionSource<bool> allRevisionReads = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        private int revisionReadCount;
         public List<CapturedRequest> Requests { get; } = [];
+        public IReadOnlyDictionary<string, string> Resources
+        {
+            get { lock (gate) return resources.ToDictionary(pair => pair.Key, pair => pair.Value.Body, StringComparer.Ordinal); }
+        }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken ct)
         {
             var path = request.RequestUri!.AbsolutePath;
             var body = request.Content is null ? "" : await request.Content.ReadAsStringAsync(ct);
-            Requests.Add(new CapturedRequest(request.Method, path, body, request.Headers.Authorization?.Parameter));
-            if (path == "/token")
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { access_token = "test-aas-token", expires_in = 300 }), Encoding.UTF8, "application/json") };
-            if (request.Method == HttpMethod.Get && resources.TryGetValue(path, out var existing))
-                return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(existing, Encoding.UTF8, "application/json") };
-            if (request.Method == HttpMethod.Delete)
+            if (request.Method == HttpMethod.Put && synchronizeConcurrentUpdates)
+                await allRevisionReads.Task.WaitAsync(ct);
+
+            lock (gate)
             {
-                resources.Remove(path);
-                return new HttpResponseMessage(HttpStatusCode.NoContent);
-            }
-            if (request.Method == HttpMethod.Put)
-            {
-                if (!resources.ContainsKey(path)) return new HttpResponseMessage(HttpStatusCode.NotFound);
-                resources[path] = body;
-                return new HttpResponseMessage(HttpStatusCode.NoContent);
-            }
-            if (request.Method == HttpMethod.Post)
-            {
-                using var document = JsonDocument.Parse(body);
-                var root = document.RootElement;
-                var id = root.TryGetProperty("id", out var idProperty) ? idProperty.GetString() : null;
-                var targetPath = path.EndsWith("/shells", StringComparison.Ordinal)
-                    ? path + "/" + Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(id!))
-                    : path.EndsWith("/submodels", StringComparison.Ordinal)
+                Requests.Add(new CapturedRequest(request.Method, path, body, request.Headers.Authorization?.Parameter));
+                if (path == "/token")
+                    return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(JsonSerializer.Serialize(new { access_token = "test-aas-token", expires_in = 300 }), Encoding.UTF8, "application/json") };
+
+                if (request.Method == HttpMethod.Get)
+                {
+                    if (!resources.TryGetValue(path, out var current))
+                        return new HttpResponseMessage(HttpStatusCode.NotFound);
+                    if (synchronizeConcurrentUpdates && ++revisionReadCount == 10)
+                        allRevisionReads.TrySetResult(true);
+                    var response = new HttpResponseMessage(HttpStatusCode.OK)
+                    {
+                        Content = new StringContent(current.Body, Encoding.UTF8, "application/json"),
+                    };
+                    response.Headers.ETag = System.Net.Http.Headers.EntityTagHeaderValue.Parse(current.ETag);
+                    return response;
+                }
+
+                if (request.Method == HttpMethod.Delete)
+                {
+                    resources.Remove(path);
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+                }
+
+                if (request.Method == HttpMethod.Put)
+                {
+                    if (!resources.TryGetValue(path, out var current))
+                        return new HttpResponseMessage(HttpStatusCode.NotFound);
+                    if (!request.Headers.IfMatch.Any(tag => !tag.IsWeak && tag.Tag == current.ETag))
+                        return new HttpResponseMessage(HttpStatusCode.PreconditionFailed);
+                    var revision = current.Revision + 1;
+                    resources[path] = new StoredResource(body, revision, BuildEtag(path, revision));
+                    return new HttpResponseMessage(HttpStatusCode.NoContent);
+                }
+
+                if (request.Method == HttpMethod.Post)
+                {
+                    using var document = JsonDocument.Parse(body);
+                    var root = document.RootElement;
+                    var id = root.TryGetProperty("id", out var idProperty) ? idProperty.GetString() : null;
+                    var targetPath = path.EndsWith("/shells", StringComparison.Ordinal)
                         ? path + "/" + Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(id!))
-                        : path + "/" + Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(id!));
-                resources[targetPath] = body;
-                return new HttpResponseMessage(HttpStatusCode.Created);
+                        : path.EndsWith("/submodels", StringComparison.Ordinal)
+                            ? path + "/" + Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(id!))
+                            : path + "/" + Microsoft.AspNetCore.WebUtilities.WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(id!));
+                    resources[targetPath] = new StoredResource(body, 1, BuildEtag(targetPath, 1));
+                    return new HttpResponseMessage(HttpStatusCode.Created);
+                }
+                return new HttpResponseMessage(HttpStatusCode.NotFound);
             }
-            return new HttpResponseMessage(HttpStatusCode.NotFound);
         }
+
+        private static string BuildEtag(string path, int revision)
+        {
+            var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..8].ToLowerInvariant();
+            return $"\\"{revision}-{digest}-representation\\"";
+        }
+
+        private sealed record StoredResource(string Body, int Revision, string ETag);
     }
 
     private sealed class CancelWriteHandler(HttpMessageHandler inner, HttpMethod method, CancellationTokenSource cancellation) : DelegatingHandler(inner)
