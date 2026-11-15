@@ -398,7 +398,7 @@ export class NodeRedClient {
       );
     const tarballUrl = new URL(parsed.data.dist.tarball);
     const integrity = parsed.data.dist.integrity
-      .split(/\\s+/)
+      .split(/\s+/)
       .find((value) => value.startsWith("sha512-"));
     if (
       tarballUrl.protocol !== "https:" ||
@@ -415,7 +415,7 @@ export class NodeRedClient {
         "The npm registry did not provide a supported official SHA-512 package tarball.",
       );
     const clean = (text: string) =>
-      text.replace(/[\\u0000-\\u001f\\u007f]/g, " ").slice(0, 500);
+      text.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 500);
     return {
       description: clean(parsed.data.description ?? ""),
       nodeSets: nodeSets.map(clean),
