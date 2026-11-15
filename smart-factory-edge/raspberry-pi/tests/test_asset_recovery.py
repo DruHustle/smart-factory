@@ -7,7 +7,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from asset_adapters import SerialJsonConnectionManager, _decode_registers, _read_modbus_mappings, _serial_record_values, validate_asset_profile
-from measurement_units import mapped_value
+from measurement_units import mapped_value, valid_mapping
 
 
 class AssetRecoveryTests(unittest.TestCase):
@@ -69,6 +69,13 @@ class AssetRecoveryTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             _serial_record_values({"signals": {"counter": 10 ** 500}}, [])
+
+    def test_mapping_validator_rejects_unrepresentable_output_integer(self):
+        mapping = {"pressure": {
+            "rawValue": 3.0, "rawUnit": "register", "scale": 1.0,
+            "offset": 0.0, "version": "sf-mapping-v1",
+        }}
+        self.assertFalse(valid_mapping(mapping, {"pressure": "bar"}, {"pressure": 10 ** 500}))
 
     def test_bounded_engineering_mapping_still_converts_valid_values(self):
         output = {}
