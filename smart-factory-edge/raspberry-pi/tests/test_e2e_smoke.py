@@ -448,10 +448,25 @@ class GatewaySmokeTests(unittest.TestCase):
             "deviceId": "esp32-wrover-01", "commandId": "gpio-test-0003",
             "status": "applied", "timestamp": int(sensor_gateway.time.time() * 1000), "pin": 18, "value": 1,
         }).encode()
-        self.assertTrue(sensor_gateway.forward_local_control_ack(settings, cloud, types.SimpleNamespace(topic=topic, payload=payload)))
+        unverified = types.SimpleNamespace(topic=topic, payload=payload, retain=False)
+        # An unverified local subscription must not turn a device receipt into
+        # trusted evidence, even when the JSON and topic are otherwise valid.
+        self.assertFalse(sensor_gateway.forward_local_control_ack(settings, cloud, unverified))
+        self.assertFalse(sensor_gateway.forward_local_control_ack(settings, cloud, unverified, transport_verified=False))
+        retained = types.SimpleNamespace(topic=topic, payload=payload, retain=True)
+        self.assertFalse(sensor_gateway.forward_local_control_ack(settings, cloud, retained, transport_verified=True))
+
+        accepted = types.SimpleNamespace(topic=topic, payload=payload, retain=False)
+        self.assertTrue(sensor_gateway.forward_local_control_ack(settings, cloud, accepted, transport_verified=True))
+        self.assertEqual(len(cloud.published), 1)
         self.assertEqual(cloud.published[0][0], "factory/factory-a/line-1/pi-edge-01/commands/ack")
         self.assertEqual(json.loads(cloud.published[0][1])["gatewayDeviceId"], "pi-edge-01")
-        self.assertFalse(sensor_gateway.forward_local_control_ack(settings, cloud, types.SimpleNamespace(topic=topic.replace("esp32-wrover-01", "unlisted-device"), payload=payload)))
+        self.assertFalse(sensor_gateway.forward_local_control_ack(
+            settings,
+            cloud,
+            types.SimpleNamespace(topic=topic.replace("esp32-wrover-01", "unlisted-device"), payload=payload, retain=False),
+            transport_verified=True,
+        ))
 
     def test_local_wrover_telemetry_is_forwarded_only_when_allowlisted(self):
         sensor_gateway = importlib.import_module("sensor_gateway")
