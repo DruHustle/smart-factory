@@ -72,7 +72,7 @@ function runtimeFixture() {
   let tamperTarball = false;
   const tarball = Buffer.from("synthetic-node-red-package-tarball");
   const integrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
-  const tarballUrl = "https://registry.npmjs.org/@fixture/node-red-test/-/node-red-test-1.2.3.tgz";
+  let tarballUrl = "https://registry.npmjs.org/@fixture/node-red-test/-/node-red-test-1.2.3.tgz";
   const calls: { url: string; init: RequestInit }[] = [];
   const entry = () => ({
     module: selection.module,
@@ -184,6 +184,9 @@ function runtimeFixture() {
     },
     get tarballUrl() {
       return tarballUrl;
+    },
+    set tarballUrl(value: string) {
+      tarballUrl = value;
     },
   };
 }
@@ -375,6 +378,14 @@ describe("Node-RED reviewed install and recovery", () => {
       expect(JSON.stringify(replay)).not.toContain("/private/");
     },
   );
+  it("rejects package metadata that points outside the official npm tarball host", async () => {
+    const runtime = runtimeFixture();
+    runtime.tarballUrl = "https://attacker.example/package.tgz";
+    const service = new NodeRedPackageService(memoryStore(), config, runtime.fetcher);
+    await expect(service.review(7, selection)).rejects.toThrow(/official SHA-512/);
+    expect(runtime.calls.some((call) => call.url.startsWith("https://attacker.example/"))).toBe(false);
+    expect(runtime.posts).toBe(0);
+  });
   it("refuses to install a tarball whose bytes differ from the reviewed SHA-512", async () => {
     const store = memoryStore(), runtime = runtimeFixture();
     runtime.tamperTarball = true;
