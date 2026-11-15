@@ -111,6 +111,7 @@ public sealed partial class EdgeConfigurationPublisher(IConfiguration configurat
     public async Task PublishAda031ControlAsync(Ada031ControlRequest request, CancellationToken ct)
     {
         ValidateAda031Control(request);
+        RequirePhysicalOperationsApproval(request.GatewayDeviceId, request.AssetId);
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         if (request.ExpiresAt <= now || request.ExpiresAt > now + 30_000)
@@ -152,6 +153,8 @@ public sealed partial class EdgeConfigurationPublisher(IConfiguration configurat
             !Regex.IsMatch(request.CommandId, "^[A-Za-z0-9_.-]{8,64}$", RegexOptions.CultureInvariant) ||
             request.Pin != 18 || request.Value is not (0 or 1) || request.HoldMs is < 1 or > 2_000 || request.Qos is < 0 or > 2)
             throw new ArgumentException("WROVER indicator command fields are invalid.");
+
+        RequirePhysicalOperationsApproval(request.GatewayDeviceId, request.TargetDeviceId);
 
         var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
         if (request.ExpiresAt <= now || request.ExpiresAt > now + 30_000)
@@ -241,6 +244,27 @@ public sealed partial class EdgeConfigurationPublisher(IConfiguration configurat
         finally
         {
             if (client.IsConnected) await client.DisconnectAsync(new MqttClientDisconnectOptionsBuilder().Build(), ct);
+        }
+    }
+
+    /// <summary>
+    /// Fail closed until an operator-led qualification is referenced and both
+    /// the gateway and physical target are explicitly allowlisted.
+    /// </summary>
+    private void RequirePhysicalOperationsApproval(params string[] targetIds)
+    {
+        var enabled = string.Equals(configuration["PHYSICAL_OPERATIONS_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
+        var approvalId = configuration["PHYSICAL_OPERATIONS_APPROVAL_ID"];
+        var approvedTargets = (configuration["PHYSICAL_OPERATIONS_APPROVED_TARGET_IDS"] ?? "")
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.Ordinal);
+        if (!enabled ||
+            approvalId is null ||
+            !Regex.IsMatch(approvalId, "^[A-Za-z0-9][A-Za-z0-9_.:-]{7,127}$", RegexOptions.CultureInvariant) ||
+            targetIds.Any(target => string.IsNullOrWhiteSpace(target) || !approvedTargets.Contains(target)))
+        {
+            throw new InvalidOperationException(
+                "Physical command publication is disabled until operator-led hardware qualification is approved and both gateway and target IDs are allowlisted.");
         }
     }
 

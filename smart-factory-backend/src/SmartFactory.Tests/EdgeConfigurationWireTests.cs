@@ -1,4 +1,7 @@
 using System.Text.Json;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Moq;
 using SmartFactory.Services.DeviceService.Application.Services;
 
 namespace SmartFactory.Tests;
@@ -113,6 +116,56 @@ public sealed class EdgeConfigurationWireTests
         Assert.Equal(uplink, command.GetProperty("uplinkQos").GetInt32());
         Assert.Equal(downlink, command.GetProperty("downlinkQos").GetInt32());
         Assert.Equal(8, command.EnumerateObject().Count());
+    }
+
+    [Fact]
+    public async Task PhysicalCommandsRemainDisabledWithoutQualificationApproval()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var configuration = new ConfigurationBuilder().Build();
+        var publisher = new EdgeConfigurationPublisher(configuration, Mock.Of<IHostEnvironment>());
+        var ada = Request("neutral") with { ExpiresAt = now + 10_000 };
+        var gpio = new GpioControlRequest(1, "pi-edge-01", "wrover", 18, 1, 100, "gpio-test-0001", now + 10_000);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publisher.PublishAda031ControlAsync(ada, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => publisher.PublishGpioControlAsync(gpio, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task PhysicalCommandsRequireApprovalReferenceAndBothExactTargets()
+    {
+        var now = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        var ada = Request("neutral") with { ExpiresAt = now + 10_000 };
+        var gpio = new GpioControlRequest(1, "pi-edge-01", "wrover", 18, 1, 100, "gpio-test-0001", now + 10_000);
+        var incomplete = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["PHYSICAL_OPERATIONS_ENABLED"] = "true",
+            ["PHYSICAL_OPERATIONS_APPROVAL_ID"] = "HWQUAL-2026-001",
+            ["PHYSICAL_OPERATIONS_APPROVED_TARGET_IDS"] = "pi-edge-01",
+        }).Build();
+        var blocked = new EdgeConfigurationPublisher(incomplete, Mock.Of<IHostEnvironment>());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => blocked.PublishAda031ControlAsync(ada, CancellationToken.None));
+        await Assert.ThrowsAsync<InvalidOperationException>(() => blocked.PublishGpioControlAsync(gpio, CancellationToken.None));
+
+        var missingApproval = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["PHYSICAL_OPERATIONS_ENABLED"] = "true",
+            ["PHYSICAL_OPERATIONS_APPROVED_TARGET_IDS"] = "pi-edge-01,urn:test:arm,wrover",
+        }).Build();
+        var unapproved = new EdgeConfigurationPublisher(missingApproval, Mock.Of<IHostEnvironment>());
+        await Assert.ThrowsAsync<InvalidOperationException>(() => unapproved.PublishAda031ControlAsync(ada, CancellationToken.None));
+
+        var approved = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["PHYSICAL_OPERATIONS_ENABLED"] = "true",
+            ["PHYSICAL_OPERATIONS_APPROVAL_ID"] = "HWQUAL-2026-001",
+            ["PHYSICAL_OPERATIONS_APPROVED_TARGET_IDS"] = "pi-edge-01,urn:test:arm,wrover",
+        }).Build();
+        var qualified = new EdgeConfigurationPublisher(approved, Mock.Of<IHostEnvironment>());
+        var adaError = await Assert.ThrowsAsync<InvalidOperationException>(() => qualified.PublishAda031ControlAsync(ada, CancellationToken.None));
+        var gpioError = await Assert.ThrowsAsync<InvalidOperationException>(() => qualified.PublishGpioControlAsync(gpio, CancellationToken.None));
+        Assert.Equal("MQTT broker is not configured.", adaError.Message);
+        Assert.Equal("MQTT broker is not configured.", gpioError.Message);
     }
 
     [Fact]

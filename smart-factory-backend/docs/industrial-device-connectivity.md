@@ -72,3 +72,21 @@ dotnet test src/SmartFactory.sln -c Release --no-restore
 ```
 
 Use SDK 10.0.404 from `global.json` and set `TEST_DASHBOARD_DATABASE_CONNECTION` to that disposable database. `--filter 'Category!=Postgres'` runs tests that do not require PostgreSQL. Software qualification and loopback protocol fixtures do not certify the customer's actual controller, register map, broker ACL, certificate trust, serial adapter or TSN hardware.
+
+
+## Physical command safety gate
+
+ADA031 motion and WROVER GPIO publication are disabled by default in DeviceService. Both require
+`PHYSICAL_OPERATIONS_ENABLED=true`, a reviewed `PHYSICAL_OPERATIONS_APPROVAL_ID`, and an exact
+comma-separated `PHYSICAL_OPERATIONS_APPROVED_TARGET_IDS` allowlist containing **both** the
+commissioned gateway ID and the requested asset/device ID. The Python Edge Agent retains its
+separate, empty-by-default ADA031 asset and WROVER control allowlists; both layers must be
+commissioned independently. The API example deliberately sets the enable flag to false and
+leaves the approval reference and target list empty.
+
+Do not enable these settings from simulation, replay, a successful CI run, or broker publication.
+Require an operator-led hardware qualification, reviewed interlocks and emergency-stop behaviour,
+a bounded motion envelope, verified physical isolation and explicit operator approval first.
+HTTP 202 still means only that an MQTT publication was accepted; it does not confirm motion or
+physical state. Read-only telemetry, connectivity diagnostics and QoS configuration are not
+physical-actuation approvals.
