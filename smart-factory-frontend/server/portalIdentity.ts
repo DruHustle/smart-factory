@@ -1,3 +1,5 @@
+import { nativeClient } from "./nativeAuthorization";
+import { managedConfiguration, verifyManagedGrant } from "./managedIdentity";
 import {
   createCipheriv,
   createDecipheriv,
@@ -13,13 +15,16 @@ export type PortalUser = User & { onesaAccessPending?: boolean };
 export const randomValue = () => randomBytes(32).toString("base64url");
 export const digest = (value: string) =>
   createHash("sha256").update(value).digest("base64url");
-export const portalRequired = () => process.env.NODE_ENV === "production" || process.env.ONESA_IDENTITY_ENABLED === "true";
+export const portalRequired = () =>
+  process.env.NODE_ENV === "production" ||
+  process.env.ONESA_IDENTITY_ENABLED === "true";
 export function portalConfig(env = process.env) {
   if (env.ONESA_IDENTITY_ENABLED !== "true") return null;
   const issuer = env.ONESA_IDENTITY_ISSUER || "",
     client = env.ONESA_IDENTITY_CLIENT_ID || "";
   const secret = env.ONESA_IDENTITY_CLIENT_SECRET || "",
     redirect = env.ONESA_IDENTITY_REDIRECT_URI || "";
+  const managed = managedConfiguration(env);
   const authority = new URL(issuer),
     callback = new URL(redirect);
   const origins = (env.ALLOWED_ORIGIN || "")
@@ -27,7 +32,7 @@ export function portalConfig(env = process.env) {
     .map((value) => value.trim());
   if (
     authority.protocol !== "https:" ||
-    issuer !== authority.origin + "/api/v1/identity" ||
+    issuer !== authority.origin + (managed ? "/" : "/api/v1/identity") ||
     callback.protocol !== "https:" ||
     redirect !== callback.origin + "/api/auth/onesa/callback" ||
     !origins.includes(callback.origin) ||
@@ -37,7 +42,7 @@ export function portalConfig(env = process.env) {
     Buffer.byteLength(env.JWT_SECRET || "") < 32
   )
     throw Error("Invalid Onesa identity configuration");
-  return { issuer, client, secret, redirect, origin: callback.origin };
+  return { issuer, client, secret, redirect, origin: callback.origin, managed };
 }
 export type PortalConfig = NonNullable<ReturnType<typeof portalConfig>>;
 export class InactivePortalIdentity extends Error {}
@@ -54,7 +59,8 @@ export async function issuerPost(
   const form = body instanceof URLSearchParams;
   const encode = (value: string) =>
     new URLSearchParams({ v: value }).toString().slice(2);
-  const response = await fetch(config.issuer + path, {
+  const endpoint = config.managed && path === "/token" ? "oauth/token" : path;
+  const response = await fetch(config.issuer + endpoint, {
     method: "POST",
     redirect: "error",
     signal: AbortSignal.timeout(5000),
@@ -103,9 +109,26 @@ const assertion = z.object({
   amr: z.array(z.string()),
   onesa_roles: z.array(z.string()),
   onesa_applications: z.array(z.string()),
-  onesa_product_roles: z.object({ factory: z.enum(["user", "admin"]) }),
+  onesa_product_roles: z.object({ factory: z.enum(["user", "admin"]), nativeClient: z.string().optional() }),
 });
-export async function livePortalIdentity(config: PortalConfig, token: string) {
+export async function livePortalIdentity(
+  config: PortalConfig,
+  token: string,
+  nonce?: string,
+) {
+  if (config.managed) {
+    try {
+      return await verifyManagedGrant(
+        config.managed,
+        config.issuer,
+        config.client,
+        token,
+        nonce,
+      );
+    } catch {
+      throw new InactivePortalIdentity();
+    }
+  }
   const parsed = assertion.safeParse(
     await issuerPost(config, "/session", { token }),
   );
@@ -174,13 +197,16 @@ export async function verifyPortalSession(
   let claim;
   try {
     const saved = z
-      .object({ token: z.string(), role: z.enum(["user", "admin"]) })
+      .object({ token: z.string(), role: z.enum(["user", "admin"]), nativeClient: z.string().optional() })
       .parse(JSON.parse(openGrant(String(row.encrypted_grant))));
-    claim = await livePortalIdentity(config, saved.token);
+    if (saved.nativeClient && (!config.managed || nativeClient(config.client) !== saved.nativeClient))
+      throw new InactivePortalIdentity();
+    claim = await livePortalIdentity(saved.nativeClient ? {...config, client: saved.nativeClient} : config, saved.token);
     if (
-      claim.iss !== row.issuer ||
+      (config.managed?.mappingIssuer || claim.iss) !== row.issuer ||
       claim.sub !== row.subject ||
-      ((user.role === "admin" || saved.role === "admin") &&
+      (!config.managed &&
+        (user.role === "admin" || saved.role === "admin") &&
         claim.onesa_product_roles.factory !== "admin")
     )
       throw new InactivePortalIdentity();
@@ -198,7 +224,15 @@ export async function verifyPortalSession(
     WHERE s.session_id=${sessionId}::uuid AND s.user_id=${user.id} AND s.expires_at>now()
       AND s.encrypted_grant=${row.encrypted_grant} AND u.auth_version=${user.authVersion} AND u.disabled_at IS NULL`);
   if (!current) throw new InactivePortalIdentity();
-  const admin = claim.onesa_product_roles.factory === "admin";
+  if (
+    config.managed &&
+    user.role === "admin" &&
+    (!claim.amr.includes("mfa") ||
+      Math.floor(Date.now() / 1000) - claim.auth_time > 300)
+  )
+    throw new InactivePortalIdentity();
+  const admin =
+    !config.managed && claim.onesa_product_roles.factory === "admin";
   return {
     ...user,
     role: admin ? "admin" : user.role,
