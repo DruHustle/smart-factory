@@ -82,6 +82,7 @@ export type PackageReview = {
   nodeSets: string[];
   pluginSets: string[];
   reviewToken: string;
+  integrity: string;
   expiresAt: string;
 };
 export const pendingInstall = (operation: InstallOperation | null) =>
