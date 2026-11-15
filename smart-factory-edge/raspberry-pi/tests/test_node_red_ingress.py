@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from config import load_settings
-from sensor_gateway import forward_local_message, telemetry_topic
+from sensor_gateway import forward_local_message, telemetry_topic, heartbeat_topic
 
 
 class NodeRedTrustBoundaryTests(unittest.TestCase):
@@ -76,6 +76,38 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
         payload.pop("observation")
         payload["action"] = "start_motor"
         self.assertFalse(self.publish(payload)[0])
+
+    def test_untrusted_status_and_provenance_types_fail_closed(self):
+        # MQTT/Node-RED JSON is untrusted: arrays and objects must be rejected
+        # rather than raising TypeError from set membership in the callback.
+        for invalid in ([], {}, None, False, 1.5):
+            with self.subTest(value=invalid):
+                heartbeat = types.SimpleNamespace(
+                    topic=heartbeat_topic("fixture", "line", "node-red-source-01"),
+                    payload=json.dumps({
+                        "deviceId": "node-red-source-01",
+                        "timestamp": 1793066400000, "status": invalid
+                    }).encode(), retain=False,
+                )
+                self.assertFalse(forward_local_message(self.settings(), None, heartbeat))
+                accepted, messages = self.publish({
+                    "deviceId": "node-red-source-01",
+                    "timestamp": 1793066400000,
+                    "sensorStatus": invalid,
+                })
+                self.assertFalse(accepted)
+                self.assertEqual(messages, [])
+                accepted, messages = self.publish({
+                    "deviceId": "node-red-source-01",
+                    "timestamp": 1793066400000,
+                    "observation": {
+                        "schemaVersion": 1, "mode": "live",
+                        "sourceQuality": invalid,
+                        "sessionId": "node-red", "sequence": 1,
+                    },
+                })
+                self.assertFalse(accepted)
+                self.assertEqual(messages, [])
 
     def test_explicitly_commissioned_source_still_preserves_broker_retention(self):
         payload = {
