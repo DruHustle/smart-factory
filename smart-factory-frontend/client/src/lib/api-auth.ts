@@ -41,15 +41,20 @@ export async function onesaAvailable(): Promise<boolean> {
 }
 export async function startOnesa(link?: { email: string; password: string }) {
   const current = window.location.hash;
-  const returnTo = current.startsWith("#/login?")
-    ? new URLSearchParams(current.split("?")[1]).get("returnTo") || "#/"
-    : current || "#/";
+  const login = current.startsWith("#/login?")
+    ? new URLSearchParams(current.slice(current.indexOf("?") + 1))
+    : null;
+  const returnTo = login ? login.get("returnTo") || "#/" : current || "#/";
   const response = await fetch(`${API_BASE_URL}/auth/onesa/start`, {
     method: "POST",
     credentials: "include",
     signal: AbortSignal.timeout(10000),
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ returnTo, ...(link ? { link } : {}) }),
+    body: JSON.stringify({
+      returnTo,
+      ...(login?.get("onesa") === "mfa" ? { stepUp: true } : {}),
+      ...(link ? { link } : {}),
+    }),
   });
   if (!response.ok)
     throw Error(
