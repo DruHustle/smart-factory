@@ -140,7 +140,7 @@ function runtimeFixture() {
           palette: {
             allowInstall: true,
             allowUpdate: false,
-            allowUpload: false,
+            allowUpload: true,
           },
         },
       });
