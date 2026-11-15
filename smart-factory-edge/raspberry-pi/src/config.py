@@ -2,10 +2,17 @@ from dataclasses import dataclass
 import os
 
 
-def _as_bool(value: str, default: bool = False) -> bool:
+def _as_bool(value: str | None, default: bool = False) -> bool:
     if value is None:
         return default
-    return value.strip().lower() in {"1", "true", "yes", "on"}
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise RuntimeError(
+        "Boolean environment settings must be explicitly true/false, yes/no, on/off, or 1/0"
+    )
 
 
 def _mqtt_qos(name: str) -> int:

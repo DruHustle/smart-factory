@@ -40,7 +40,9 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       ('urn:scope:first','First asset','pump','{}'::json),
       ('urn:scope:second','Second asset','pump','{}'::json) returning id,"assetId"`);
       await db.execute(sql`insert into factory_items(ref,factory_id,device_id,origin,inventory_tag,width,depth,height)
-      values(${`device:${devices[0].id}`},${firstFactory}::uuid,${devices[0].id},'attached','SOURCE-01',1,1,1)`);
+      values
+        (${`device:${devices[0].id}`},${firstFactory}::uuid,${devices[0].id},'attached','SOURCE-01',1,1,1),
+        (${`device:${devices[1].id}`},${firstFactory}::uuid,${devices[1].id},'attached','SOURCE-02',1,1,1)`);
       for (const [index, factory] of [firstFactory, secondFactory].entries()) {
         await db.execute(sql`insert into factory_items(ref,factory_id,asset_id,origin,inventory_tag,width,depth,height)
         values(${`asset:${assets[index].id}`},${factory}::uuid,${assets[index].id},'attached','PUMP-01',1,1,1)`);

@@ -82,6 +82,7 @@ import {
   publishEdgeConfiguration,
   publishAda031Control,
   publishWroverIndicator,
+  DeviceServiceUnavailableError,
 } from "./aasProvisioningClient";
 import {
   DEMO_ACCOUNTS,
@@ -886,16 +887,23 @@ export const appRouter = router({
           sessionId: ctx.session?.sessionId,
           onesa: ctx.session?.onesa,
         });
-        return publishWroverIndicator(
-          {
-            gatewayDeviceId,
-            targetDeviceId: device.deviceId,
-            commandId,
-            qos,
-            expiresAt: Date.now() + 10_000,
-          },
-          userToken,
-        );
+        try {
+          return await publishWroverIndicator(
+            {
+              gatewayDeviceId,
+              targetDeviceId: device.deviceId,
+              commandId,
+              qos,
+              expiresAt: Date.now() + 10_000,
+            },
+            userToken,
+          );
+        } catch (error) {
+          if (error instanceof DeviceServiceUnavailableError) {
+            throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: error.message });
+          }
+          throw error;
+        }
       }),
   }),
 
@@ -1290,16 +1298,23 @@ export const appRouter = router({
           sessionId: ctx.session?.sessionId,
           onesa: ctx.session?.onesa,
         });
-        return publishAda031Control(
-          {
-            gatewayDeviceId: connection.gatewayDeviceId,
-            assetId: asset.assetId,
-            ...input.command,
-            commandId,
-            expiresAt: Date.now() + 10_000,
-          },
-          userToken,
-        );
+        try {
+          return await publishAda031Control(
+            {
+              gatewayDeviceId: connection.gatewayDeviceId,
+              assetId: asset.assetId,
+              ...input.command,
+              commandId,
+              expiresAt: Date.now() + 10_000,
+            },
+            userToken,
+          );
+        } catch (error) {
+          if (error instanceof DeviceServiceUnavailableError) {
+            throw new TRPCError({ code: "SERVICE_UNAVAILABLE", message: error.message });
+          }
+          throw error;
+        }
       }),
     transition: engineerProcedure
       .input(

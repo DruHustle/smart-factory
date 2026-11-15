@@ -76,30 +76,47 @@ public sealed partial class AasProvisioningService(HttpClient http, IConfigurati
             throw new AasVersionConflictException("AAS shell has changed since the expected revision.");
         var descriptor = await ReadCurrentResourceAsync(RegistryUri($"shell-descriptors/{EncodeId(input.AssetId)}"), ct);
 
-        var updated = new List<PreviousAasResource>();
+        var updated = new List<UpdatedAasResource>();
         try
         {
             for (var index = 0; index < documents.Submodels.Count; index++)
             {
                 var model = documents.Submodels[index];
-                await SendJsonAsync(HttpMethod.Put, currentSubmodels[index].Uri, model, ct);
-                updated.Add(currentSubmodels[index]);
+                await SendJsonAsync(HttpMethod.Put, currentSubmodels[index].Uri, model, ct, currentSubmodels[index].ETag);
+                updated.Add(new UpdatedAasResource(currentSubmodels[index], model));
             }
-            await SendJsonAsync(HttpMethod.Put, shell.Uri, documents.Shell, ct);
-            updated.Add(shell);
+            await SendJsonAsync(HttpMethod.Put, shell.Uri, documents.Shell, ct, shell.ETag);
+            updated.Add(new UpdatedAasResource(shell, documents.Shell));
             if (!RepositoryManagesRegistry)
             {
-                await SendJsonAsync(HttpMethod.Put, descriptor.Uri, BuildDescriptor(input), ct);
-                updated.Add(descriptor);
+                var descriptorPayload = BuildDescriptor(input);
+                await SendJsonAsync(HttpMethod.Put, descriptor.Uri, descriptorPayload, ct, descriptor.ETag);
+                updated.Add(new UpdatedAasResource(descriptor, descriptorPayload));
             }
         }
         catch (Exception error)
         {
             using var recovery = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            foreach (var resource in updated.AsEnumerable().Reverse())
+            foreach (var write in updated.AsEnumerable().Reverse())
             {
-                try { await SendJsonAsync(HttpMethod.Put, resource.Uri, resource.Payload, recovery.Token); }
-                catch (Exception rollbackError) { logger.LogError(rollbackError, "AAS revision rollback failed for {ResourcePath}.", resource.Uri.AbsolutePath); }
+                try
+                {
+                    // PUT responses do not carry a new ETag. Re-read and compare the
+                    // current representation before compensating, then use its ETag
+                    // so a concurrent editor cannot be overwritten by rollback.
+                    var current = await ReadCurrentResourceAsync(write.Previous.Uri, recovery.Token);
+                    var expected = JsonSerializer.SerializeToElement(write.WrittenPayload);
+                    if (!JsonElement.DeepEquals(current.Payload, expected))
+                    {
+                        logger.LogWarning("AAS revision rollback skipped for {ResourcePath}; the resource changed after this request's write.", write.Previous.Uri.AbsolutePath);
+                        continue;
+                    }
+                    await SendJsonAsync(HttpMethod.Put, write.Previous.Uri, write.Previous.Payload, recovery.Token, current.ETag);
+                }
+                catch (Exception rollbackError)
+                {
+                    logger.LogError(rollbackError, "AAS revision rollback failed for {ResourcePath}.", write.Previous.Uri.AbsolutePath);
+                }
             }
             if (error is HttpRequestException { StatusCode: HttpStatusCode.Conflict or HttpStatusCode.PreconditionFailed })
                 throw new AasVersionConflictException("AAS repository rejected a stale revision update.");
@@ -108,7 +125,8 @@ public sealed partial class AasProvisioningService(HttpClient http, IConfigurati
         return Result(documents);
     }
 
-    private sealed record PreviousAasResource(Uri Uri, JsonElement Payload);
+    private sealed record PreviousAasResource(Uri Uri, JsonElement Payload, EntityTagHeaderValue ETag);
+    private sealed record UpdatedAasResource(PreviousAasResource Previous, object WrittenPayload);
 
     private async Task<PreviousAasResource> ReadCurrentResourceAsync(Uri uri, CancellationToken ct)
     {
@@ -120,9 +138,11 @@ public sealed partial class AasProvisioningService(HttpClient http, IConfigurati
             throw new AasVersionConflictException("The expected AAS resource no longer exists in the repository.");
         if (!response.IsSuccessStatusCode)
             throw new HttpRequestException($"Configured AAS service returned HTTP {(int)response.StatusCode} while reading the current revision.", null, response.StatusCode);
+        if (response.Headers.ETag is not { IsWeak: false } etag)
+            throw new AasVersionConflictException("The AAS service did not provide a strong ETag; refusing an update without conditional write protection.");
         await using var body = await response.Content.ReadAsStreamAsync(ct);
         using var document = await JsonDocument.ParseAsync(body, cancellationToken: ct);
-        return new PreviousAasResource(uri, document.RootElement.Clone());
+        return new PreviousAasResource(uri, document.RootElement.Clone(), etag);
     }
 
     private static bool HasExpectedRevision(JsonElement resource, string idShort, int expectedVersion)
@@ -179,7 +199,7 @@ public sealed partial class AasProvisioningService(HttpClient http, IConfigurati
         };
     }
 
-    private async Task SendJsonAsync(HttpMethod method, Uri uri, object payload, CancellationToken ct)
+    private async Task SendJsonAsync(HttpMethod method, Uri uri, object payload, CancellationToken ct, EntityTagHeaderValue? ifMatch = null)
     {
         var token = await GetAccessTokenAsync(ct);
         using var request = new HttpRequestMessage(method, uri)
@@ -187,6 +207,7 @@ public sealed partial class AasProvisioningService(HttpClient http, IConfigurati
             Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
         };
         AddBearerIfPresent(request, token);
+        if (ifMatch is not null) request.Headers.IfMatch.Add(ifMatch);
         using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
         if (!response.IsSuccessStatusCode) throw new HttpRequestException($"Configured AAS service returned HTTP {(int)response.StatusCode}.", null, response.StatusCode);
     }

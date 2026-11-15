@@ -69,9 +69,11 @@ export default function NodeRedPackages() {
           <CardTitle>Node-RED nodes, plugins & libraries</CardTitle>
           <p className="max-w-3xl text-sm text-muted-foreground">
             Add an exact version of a Node-RED package to the enrolled OT
-            gateway. Package code runs with the gateway’s permissions and can
-            affect existing flows and connected devices. Review each package
-            before installation.
+            gateway. The reviewed npm tarball is downloaded from the official
+            registry, SHA-512 verified, then uploaded as that exact archive;
+            Node-RED’s floating package-name install is not used. Package code
+            runs with the gateway’s permissions and can affect existing flows
+            and connected devices. Review each package before installation.
           </p>
         </div>
         <Button
@@ -244,6 +246,9 @@ export default function NodeRedPackages() {
                 {review.description && (
                   <p className="text-sm">{review.description}</p>
                 )}
+                <p className="break-all text-xs text-muted-foreground">
+                  Verified npm SHA-512 integrity: <code>{review.integrity}</code>
+                </p>
                 <p className="text-sm">
                   Declared by the package: {review.nodeSets.length} node sets
                   and {review.pluginSets.length} plugin sets.

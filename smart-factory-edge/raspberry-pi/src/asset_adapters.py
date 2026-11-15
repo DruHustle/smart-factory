@@ -15,7 +15,14 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 
-from measurement_units import SOURCE_UNITS, mapped_value, valid_identity
+from measurement_units import (
+    MAX_MAPPING_FACTOR,
+    MAX_RAW_MAPPING_VALUE,
+    SOURCE_UNITS,
+    finite_number,
+    mapped_value,
+    valid_identity,
+)
 
 SUPPORTED_METRICS = {"temperature", "humidity", "vibration", "power", "pressure", "rpm"}
 SERIAL_SIGNAL_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9_.-]{0,63}$")
@@ -73,17 +80,20 @@ def validate_asset_profile(profile: dict, expected_gateway_id: str) -> list[dict
             metric = mapping.get("metric")
             if metric is not None and str(metric).lower() not in SUPPORTED_METRICS:
                 raise ValueError("Tag mapping contains an unsupported metric")
-            if mapping.get("unit") and (metric not in SOURCE_UNITS or mapping["unit"] not in SOURCE_UNITS[metric]):
+            unit = mapping.get("unit")
+            if unit is not None and not isinstance(unit, str):
+                raise ValueError("Engineering unit must be a string")
+            if unit and (metric not in SOURCE_UNITS or unit not in SOURCE_UNITS[metric]):
                 raise ValueError("Unsupported engineering unit for metric")
             count = mapping.get("count", 1)
             if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 2:
                 raise ValueError("Modbus count must be one or two registers for supported data types")
             offset = mapping.get("offset", 0)
-            if isinstance(offset, bool) or not isinstance(offset, (int, float)) or not math.isfinite(offset):
-                raise ValueError("Tag mapping offset must be a finite number")
+            if not finite_number(offset, MAX_MAPPING_FACTOR):
+                raise ValueError("Tag mapping offset must be a bounded finite number")
             scale = mapping.get("scale", 1)
-            if isinstance(scale, bool) or not isinstance(scale, (int, float)) or not math.isfinite(scale):
-                raise ValueError("Tag mapping scale must be a finite number")
+            if not finite_number(scale, MAX_MAPPING_FACTOR):
+                raise ValueError("Tag mapping scale must be a bounded finite number")
             if "address" in mapping and (isinstance(mapping["address"], bool) or not isinstance(mapping["address"], int) or not 0 <= mapping["address"] <= 65535):
                 raise ValueError("Modbus address is outside the supported range")
             if protocol in {"modbus_tcp", "modbus_rtu"}:
@@ -376,11 +386,8 @@ def _serial_record_values(record: dict, mappings: list[dict]) -> dict[str, Any]:
         source = mapping.get("source") or mapping.get("name") or metric
         if metric and source in record and record[source] is not None:
             raw_value = record[source]
-            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)):
-                raise ValueError(f"Serial telemetry field {source} must be numeric")
-            value = float(raw_value) * float(mapping.get("scale", 1)) + float(mapping.get("offset", 0))
-            if not math.isfinite(value):
-                raise ValueError("Serial telemetry values must be finite numbers")
+            if not finite_number(raw_value, MAX_RAW_MAPPING_VALUE):
+                raise ValueError(f"Serial telemetry field {source} must be a bounded finite number")
             mapped_value(values, metric, raw_value, mapping)
 
     signals = record.get("signals")
@@ -391,8 +398,8 @@ def _serial_record_values(record: dict, mappings: list[dict]) -> dict[str, Any]:
         for name, raw_value in signals.items():
             if not isinstance(name, str) or not SERIAL_SIGNAL_NAME.fullmatch(name):
                 raise ValueError("Serial asset signal name is invalid")
-            if isinstance(raw_value, bool) or not isinstance(raw_value, (int, float)) or not math.isfinite(raw_value):
-                raise ValueError(f"Serial asset signal {name} must be a finite number")
+            if not finite_number(raw_value, 4_294_967_295):
+                raise ValueError(f"Serial asset signal {name} must be a bounded finite number")
             normalized_signals[name] = float(raw_value)
         if normalized_signals:
             values["assetSignals"] = normalized_signals

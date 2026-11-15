@@ -165,6 +165,34 @@ describe("AAS provisioning client", () => {
     expect(JSON.parse(String(init.body))).toMatchObject({ schemaVersion: 2, assetId: "urn:test:arm", action: "jog", joint: "base", direction: "increase", commandId: "command-0001", expiresAt });
   });
 
+  it("preserves DeviceService safety-gate responses as service unavailable", async () => {
+    vi.stubEnv("NODE_ENV", "development");
+    vi.stubEnv("AAS_PROVISIONING_API_URL", "http://device-service:8080/api/assets");
+    vi.stubEnv("AAS_PROVISIONING_TOKEN", "a-separate-provisioning-secret-long-enough");
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      error: "Physical command publication is disabled until operator-led hardware qualification is approved.",
+    }), { status: 503 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(publishAda031Control({
+      gatewayDeviceId: "pi-edge-01", assetId: "urn:test:arm", action: "jog",
+      joint: "base", direction: "increase", commandId: "command-0002",
+      expiresAt: Date.now() + 5000,
+    }, "signed-engineer-session-token-long-enough")).rejects.toMatchObject({
+      name: "DeviceServiceUnavailableError",
+      statusCode: 503,
+      message: "Physical command publication is disabled until operator-led hardware qualification is approved.",
+    });
+
+    await expect(publishWroverIndicator({
+      gatewayDeviceId: "pi-edge-01", targetDeviceId: "wrover",
+      commandId: "indicator-0001", expiresAt: Date.now() + 5000,
+    }, "signed-operator-session-token-long-enough")).rejects.toMatchObject({
+      name: "DeviceServiceUnavailableError",
+      statusCode: 503,
+    });
+  });
+
   it("publishes a bounded ADA031 operation profile", async () => {
     vi.stubEnv("NODE_ENV", "development");
     vi.stubEnv("AAS_PROVISIONING_API_URL", "http://device-service:8080/api/assets");

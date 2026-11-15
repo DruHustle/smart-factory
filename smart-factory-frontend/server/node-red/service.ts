@@ -26,6 +26,8 @@ const reviewPayload = packageSelection
     actorId: z.number().int().positive(),
     runtimeId: z.string().uuid(),
     revision: z.string().regex(/^[a-f0-9]{64}$/),
+    tarballUrl: z.string().url().max(2048),
+    integrity: z.string().regex(/^sha512-[A-Za-z0-9+/]{86}==$/),
     expires: z.number().int(),
   })
   .strict();
@@ -162,10 +164,12 @@ export class NodeRedPackageService {
         true,
       );
     const metadata = await client.packageMetadata(input);
+    const { tarballUrl, integrity, ...displayMetadata } = metadata;
     const expires = Date.now() + REVIEW_LIFETIME_MS;
     return {
       ...input,
-      ...metadata,
+      ...displayMetadata,
+      integrity,
       target: config.target,
       expiresAt: new Date(expires).toISOString(),
       reviewToken: encodeReview(
@@ -174,6 +178,8 @@ export class NodeRedPackageService {
           actorId,
           runtimeId: config.target.id,
           revision: config.target.revision,
+          tarballUrl,
+          integrity,
           expires,
         },
         config,
@@ -202,7 +208,7 @@ export class NodeRedPackageService {
     if (claimed.accepted) {
       // The durable reservation is committed before any mutating remote request.
       // A process restart never replays it. Status can be read by every replica.
-      void this.run(operation, config).catch(() => {
+      void this.run(operation, config, reviewed).catch(() => {
         // If persistence itself fails, leave the saved pending reservation in
         // place. It must be reconciled; never release or retry it optimistically.
       });
@@ -210,7 +216,11 @@ export class NodeRedPackageService {
     return claimed.operation;
   }
 
-  private async run(operation: InstallOperation, config: NodeRedConfiguration) {
+  private async run(
+    operation: InstallOperation,
+    config: NodeRedConfiguration,
+    reviewed: ReviewPayload,
+  ) {
     const client = this.client(config);
     const selection = { module: operation.module, version: operation.version };
     let transmitted = false;
@@ -246,8 +256,12 @@ export class NodeRedPackageService {
           current.state !== "installing"
         )
           return;
+        const tarball = await client.downloadVerifiedTarball(
+          reviewed.tarballUrl,
+          reviewed.integrity,
+        );
         transmitted = true;
-        await client.install(selection);
+        await client.installTarball(selection, tarball);
         postCompleted = true;
         await client.checkRuntime();
         const verified = await client.installed(selection);

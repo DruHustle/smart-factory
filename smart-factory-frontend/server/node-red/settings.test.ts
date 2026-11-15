@@ -54,7 +54,7 @@ describe("optional Node-RED gateway management policy", () => {
     expect(policy.externalModules.palette).toEqual({
       allowInstall: true,
       allowUpdate: false,
-      allowUpload: false,
+      allowUpload: true,
     });
     const set = vi.fn(),
       next = vi.fn();

@@ -39,6 +39,8 @@ except Exception:  # pragma: no cover
 STOP = Event()
 INGRESS_FAILED = Event()
 MAX_EPOCH_MILLISECONDS = 9_223_372_036_854_775_807
+MAX_METRIC_MAGNITUDE = 1_000_000_000
+MAX_NAMED_SIGNAL_MAGNITUDE = 4_294_967_295
 WROVER_CONTROL_PINS = {18}
 GATEWAY_SESSION = str(uuid.uuid4())
 OBSERVATION_SEQUENCE = count()
@@ -52,7 +54,7 @@ def gateway_observation(mode="live", quality="good"):
     return normalize_provenance(result)
 
 def source_observation(value):
-    return isinstance(value,dict) and set(value)=={"schemaVersion","mode","sourceQuality","sessionId","sequence"} and type(value.get("schemaVersion")) is int and value["schemaVersion"]==1 and value.get("mode")=="live" and value.get("sourceQuality") in {"good","bad"} and isinstance(value.get("sessionId"),str) and IDENTIFIER.fullmatch(value["sessionId"]) is not None and isinstance(value.get("sequence"),int) and not isinstance(value["sequence"],bool) and 0<=value["sequence"]<=9007199254740991
+    return isinstance(value,dict) and set(value)=={"schemaVersion","mode","sourceQuality","sessionId","sequence"} and type(value.get("schemaVersion")) is int and value["schemaVersion"]==1 and value.get("mode")=="live" and type(value.get("sourceQuality")) is str and value["sourceQuality"] in {"good","bad"} and isinstance(value.get("sessionId"),str) and IDENTIFIER.fullmatch(value["sessionId"]) is not None and isinstance(value.get("sequence"),int) and not isinstance(value["sequence"],bool) and 0<=value["sequence"]<=9007199254740991
 
 def _finite_number(value) -> bool:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -75,6 +77,21 @@ def command_topic(site_id: str, line_id: str, device_id: str) -> str:
     return encoded_topic(site_id,line_id,device_id,"commands")
 
 
+def _unique_json_object(pairs):
+    """Reject duplicate JSON object keys at every nesting level.
+
+    MQTT payloads cross multiple parsers (Node-RED, the gateway and API).
+    Accepting duplicate keys makes identity, timestamps and measurements
+    dependent on each parser's first/last-key policy.
+    """
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
     """Accept only bounded telemetry from configured sensor identities and topics."""
     if len(payload) > 16 * 1024:
@@ -92,8 +109,8 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
     if not all(valid_identity(value) for value in (site_id,line_id,device_id)) or kind not in {"telemetry", "heartbeat"} or device_id not in settings.local_mqtt_device_ids:
         return False
     try:
-        record = json.loads(payload.decode("utf-8", errors="strict"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        record = json.loads(payload.decode("utf-8", errors="strict"), object_pairs_hook=_unique_json_object)
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return False
     if not isinstance(record, dict) or record.get("deviceId") != device_id:
         return False
@@ -102,21 +119,22 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
         return False
 
     if kind == "heartbeat":
-        return set(record) == {"deviceId", "timestamp", "status"} and record.get("status") in {"online", "offline"}
+        return set(record) == {"deviceId", "timestamp", "status"} and isinstance(record.get("status"), str) and record["status"] in {"online", "offline"}
 
-    allowed = {"deviceId", "timestamp", "temperature", "humidity", "vibration", "power", "pressure", "rpm", "sensorType", "sensorStatus", "assetId", "assetSignals", "integration", "units", "observation", "mapping"}
+    allowed = {"deviceId", "timestamp", "temperature", "humidity", "vibration", "power", "pressure", "rpm", "sensorType", "sensorStatus", "assetId", "assetSignals", "units", "observation", "mapping", "integration"}
     if any(key not in allowed for key in record):
         return False
+    if "integration" in record:
+        try:
+            normalize_provenance(record["integration"])
+        except ValueError:
+            return False
     if "units" in record and not valid_units(record["units"]): return False
     if "observation" in record and not source_observation(record["observation"]): return False
     if "mapping" in record and not valid_mapping(record["mapping"],record.get("units",{}),record): return False
-    try:
-        normalize_provenance(record.get("integration"))
-    except ValueError:
-        return False
     for key in {"temperature", "humidity", "vibration", "power", "pressure", "rpm"} & record.keys():
         value = record[key]
-        if value is not None and not _finite_number(value):
+        if value is not None and (not _finite_number(value) or abs(value) > MAX_METRIC_MAGNITUDE):
             return False
         # Relative humidity is a percentage for both the DHT11 and generic
         # industrial telemetry contract. Values outside this physical range
@@ -125,7 +143,7 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
             return False
     if "sensorType" in record and (not isinstance(record["sensorType"], str) or not 1 <= len(record["sensorType"]) <= 64):
         return False
-    if "sensorStatus" in record and record["sensorStatus"] not in {"ok", "read_error"}:
+    if "sensorStatus" in record and (not isinstance(record["sensorStatus"], str) or record["sensorStatus"] not in {"ok", "read_error"}):
         return False
     if record.get("sensorType") == "DHT11":
         # The connected WROVER firmware always declares whether the physical
@@ -148,7 +166,7 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
         for name, value in signals.items():
             if not isinstance(name, str) or not name or len(name) > 64:
                 return False
-            if not _finite_number(value):
+            if not _finite_number(value) or abs(value) > MAX_NAMED_SIGNAL_MAGNITUDE:
                 return False
     return True
 
@@ -173,6 +191,10 @@ def forward_local_message(settings, cloud_client, msg, policy=None, transport_ve
     if gateway_id:
         payload["gatewayId"] = gateway_id
     is_node_red = payload["deviceId"] in set(getattr(settings, "node_red_source_ids", ()))
+    is_control_device = payload["deviceId"] in set(getattr(settings, "local_mqtt_control_device_ids", ()))
+    if is_control_device and ("integration" in payload or not isinstance(payload.get("observation"), dict)):
+        print("[LOCAL MQTT] rejected device-supplied provenance for a controlled WROVER")
+        return False
     if is_node_red and ("integration" in payload or "observation" in payload):
         print("[NODE-RED] rejected supplied provenance; Python alone classifies this source")
         return False
@@ -215,7 +237,7 @@ def validate_gpio_command(settings, command: dict) -> dict:
         raise ValueError("GPIO command fields are invalid")
     if len(json.dumps(command, separators=(",", ":")).encode("utf-8")) > 512:
         raise ValueError("GPIO command exceeds the supported size")
-    if command.get("schemaVersion") != 1 or command.get("action") != "set_gpio":
+    if type(command.get("schemaVersion")) is not int or command["schemaVersion"] != 1 or command.get("action") != "set_gpio":
         raise ValueError("GPIO command action or schema is unsupported")
     command_id = command.get("commandId")
     target = command.get("targetDeviceId")
@@ -324,11 +346,24 @@ def forward_local_control_ack(settings, cloud_client, msg, transport_verified=Fa
     if [site,line]!=[settings.site_id,settings.line_id]:return False
     if device_id not in set(getattr(settings, "local_mqtt_control_device_ids", ())):
         return False
+    # GPIO receipts are operational evidence, not telemetry. A retained
+    # message or unverified local subscription could replay an old "applied"
+    # receipt after reconnection; fail closed before publishing upstream.
+    if not transport_verified or getattr(msg, "retain", False):
+        return False
     if len(msg.payload) > 1024:
         return False
+    def unique_ack_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate control acknowledgement field")
+            result[key] = value
+        return result
+
     try:
-        ack = json.loads(msg.payload.decode("utf-8", errors="strict"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        ack = json.loads(msg.payload.decode("utf-8", errors="strict"), object_pairs_hook=unique_ack_fields)
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return False
     if not isinstance(ack, dict) or ack.get("deviceId") != device_id:
         return False
@@ -338,11 +373,11 @@ def forward_local_control_ack(settings, cloud_client, msg, transport_verified=Fa
         return False
     if isinstance(timestamp, bool) or not isinstance(timestamp, int) or not 0 < timestamp <= MAX_EPOCH_MILLISECONDS:
         return False
-    if ack.get("status") not in {"applied", "rejected", "duplicate_ignored"}:
+    if not isinstance(ack.get("status"), str) or ack["status"] not in {"applied", "rejected", "duplicate_ignored"}:
         return False
     if ack.get("action") == "configure_mqtt_qos":
         required = {"action", "deviceId", "commandId", "status", "timestamp", "revision", "requestedRevision", "uplinkQos", "downlinkQos"}
-        if not transport_verified or getattr(msg, "retain", False) or not required.issubset(ack) or set(ack) - required - {"reason"}:
+        if not required.issubset(ack) or set(ack) - required - {"reason"}:
             return False
         if type(ack["requestedRevision"]) is not int or not 1 <= ack["requestedRevision"] <= 0xffffffff:
             return False
@@ -352,8 +387,18 @@ def forward_local_control_ack(settings, cloud_client, msg, transport_verified=Fa
             return False
         if ack["status"] not in {"applied", "rejected"} or ("reason" in ack and (not isinstance(ack["reason"], str) or len(ack["reason"]) > 128)):
             return False
-    pin = ack.get("pin")
-    if pin is not None and (isinstance(pin, bool) or not isinstance(pin, int) or pin not in WROVER_CONTROL_PINS):
+    else:
+        # WROVER firmware emits only these GPIO receipt fields. Reject
+        # unknown actions and extra fields rather than relaying an arbitrary
+        # JSON document under the trusted gateway acknowledgement topic.
+        gpio_fields = {"deviceId", "commandId", "status", "timestamp", "pin", "value", "reason"}
+        if "action" in ack or set(ack) - gpio_fields:
+            return False
+        if "pin" in ack and (type(ack["pin"]) is not int or ack["pin"] not in WROVER_CONTROL_PINS):
+            return False
+        if "value" in ack and (type(ack["value"]) is not int or ack["value"] not in (0, 1)):
+            return False
+    if "reason" in ack and (not isinstance(ack["reason"], str) or len(ack["reason"]) > 128):
         return False
     result = cloud_client.publish(
         encoded_topic(settings.site_id,settings.line_id,settings.device_id,"commands/ack"),
@@ -621,7 +666,7 @@ def make_mqtt_client(settings, apply_configuration=None, relay_control=None, rel
 def parse_serial_line(line: str) -> dict:
     if len(line.encode("utf-8")) > 16*1024:
         raise ValueError("invalid_telemetry:bytes")
-    record = json.loads(line)
+    record = json.loads(line, object_pairs_hook=_unique_json_object)
     if not isinstance(record,dict):
         raise ValueError("invalid_telemetry:object")
     if "timestamp" not in record:
