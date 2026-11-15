@@ -70,6 +70,7 @@ function runtimeFixture() {
   let pluginOnly = false;
   let wrongVersion = false;
   let tamperTarball = false;
+  let allowUpload = true;
   const tarball = Buffer.from("synthetic-node-red-package-tarball");
   const integrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
   let tarballUrl = "https://registry.npmjs.org/@fixture/node-red-test/-/node-red-test-1.2.3.tgz";
@@ -140,7 +141,7 @@ function runtimeFixture() {
           palette: {
             allowInstall: true,
             allowUpdate: false,
-            allowUpload: true,
+            allowUpload,
           },
         },
       });
@@ -175,6 +176,9 @@ function runtimeFixture() {
     },
     set tamperTarball(value: boolean) {
       tamperTarball = value;
+    },
+    set allowUpload(value: boolean) {
+      allowUpload = value;
     },
     get tarball() {
       return tarball;
@@ -289,6 +293,13 @@ describe("Node-RED package input and transport boundary", () => {
     expect(() =>
       nodeRedConfiguration({ ...env, ENABLE_DEMO_ACCOUNTS: "true" }),
     ).toThrow(/private installation/);
+  });
+  it("refuses a runtime that cannot accept the verified tarball upload", async () => {
+    const runtime = runtimeFixture();
+    runtime.allowUpload = false;
+    const client = new NodeRedClient(config(), runtime.fetcher);
+    await expect(client.checkRuntime()).rejects.toThrow(/tarball uploads/);
+    expect(runtime.posts).toBe(0);
   });
   it("does not follow redirects or expose the credential in public status", async () => {
     const runtime = runtimeFixture(),
