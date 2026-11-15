@@ -36,7 +36,7 @@ def valid_mapping(mapping, units, values):
         if not isinstance(item["rawUnit"], str) or item["rawUnit"] not in {"register", "native"} or item["version"] != "sf-mapping-v1": return False
         for key, bound in (("rawValue", 9007199254740991), ("scale", 1e9), ("offset", 1e9)):
             value=item[key]
-            if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or abs(value)>bound:return False
+            if isinstance(value,bool) or not isinstance(value,(int,float)) or abs(value)>bound or not math.isfinite(value):return False
         value=values[metric]
         if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or abs(item["rawValue"]*item["scale"]+item["offset"]-value)>max(1e-6,abs(value)*1e-9):return False
     return True
