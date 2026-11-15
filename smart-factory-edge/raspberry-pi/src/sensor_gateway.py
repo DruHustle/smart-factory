@@ -191,6 +191,10 @@ def forward_local_message(settings, cloud_client, msg, policy=None, transport_ve
     if gateway_id:
         payload["gatewayId"] = gateway_id
     is_node_red = payload["deviceId"] in set(getattr(settings, "node_red_source_ids", ()))
+    is_control_device = payload["deviceId"] in set(getattr(settings, "local_mqtt_control_device_ids", ()))
+    if is_control_device and ("integration" in payload or not isinstance(payload.get("observation"), dict)):
+        print("[LOCAL MQTT] rejected device-supplied provenance for a controlled WROVER")
+        return False
     if is_node_red and ("integration" in payload or "observation" in payload):
         print("[NODE-RED] rejected supplied provenance; Python alone classifies this source")
         return False
