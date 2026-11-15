@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import {
   exactPackageVersion,
@@ -13,6 +14,7 @@ import {
 } from "./configuration";
 
 const LIMIT = 1_048_576;
+const TARBALL_LIMIT = 25 * 1024 * 1024;
 const settingSchema = z.object({
   version: exactPackageVersion,
   user: z.object({
@@ -95,27 +97,27 @@ export class NodeRedClient {
 
   private async request(
     path: string,
-    install?: { module: string; version: string },
+    mutation?: { body: BodyInit },
   ) {
+    const installing = mutation !== undefined;
     const signal = AbortSignal.timeout(
-      install ? INSTALL_TIMEOUT_MS : REQUEST_TIMEOUT_MS,
+      installing ? INSTALL_TIMEOUT_MS : REQUEST_TIMEOUT_MS,
     );
     let response: Response;
     try {
       response = await this.fetcher(this.config.adminUrl + path, {
-        method: install ? "POST" : "GET",
+        method: installing ? "POST" : "GET",
         redirect: "error",
         signal,
         headers: {
           Accept: "application/json",
           Authorization: `Bearer ${this.config.token}`,
-          ...(install ? { "Content-Type": "application/json" } : {}),
         },
-        ...(install ? { body: JSON.stringify(install) } : {}),
+        ...(mutation ? { body: mutation.body } : {}),
       });
     } catch {
       throw new NodeRedError(
-        install
+        installing
           ? "The installation response was lost or timed out. Its outcome is unconfirmed; check the saved operation before any further installation."
           : "The private Node-RED route is unreachable or timed out. Check the supervised SSH forward.",
       );
@@ -236,10 +238,108 @@ export class NodeRedClient {
     };
   }
 
-  async install(selection: { module: string; version: string }) {
-    // Revalidate at the final transport boundary. The official version field
-    // is separate from module; URL, tarball and local path fields are absent.
-    return this.request("/nodes", packageSelection.parse(selection));
+  async downloadVerifiedTarball(urlValue: string, integrity: string) {
+    let url: URL;
+    try {
+      url = new URL(urlValue);
+    } catch {
+      throw new NodeRedError("The reviewed npm tarball URL is invalid.", true);
+    }
+    if (
+      url.protocol !== "https:" ||
+      url.hostname !== "registry.npmjs.org" ||
+      url.port ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      !/^sha512-[A-Za-z0-9+/]{86}==$/.test(integrity)
+    )
+      throw new NodeRedError(
+        "Only an immutable SHA-512 tarball from the official npm registry can be installed.",
+        true,
+      );
+    const expected = Buffer.from(integrity.slice("sha512-".length), "base64");
+    if (expected.byteLength !== 64)
+      throw new NodeRedError("The reviewed npm integrity value is invalid.", true);
+
+    let response: Response;
+    try {
+      response = await this.fetcher(url.href, {
+        headers: { Accept: "application/octet-stream" },
+        redirect: "error",
+        signal: AbortSignal.timeout(INSTALL_TIMEOUT_MS),
+      });
+    } catch {
+      throw new NodeRedError(
+        "The exact reviewed npm tarball could not be downloaded. No Node-RED installation request was sent.",
+        true,
+      );
+    }
+    if (!response.ok) {
+      await response.body?.cancel();
+      throw new NodeRedError(
+        "The exact reviewed npm tarball is no longer available. No Node-RED installation request was sent.",
+        true,
+      );
+    }
+    const size = Number(response.headers.get("content-length"));
+    if (Number.isFinite(size) && size > TARBALL_LIMIT) {
+      await response.body?.cancel();
+      throw new NodeRedError(
+        "The reviewed package exceeds the 25 MiB installation limit.",
+        true,
+      );
+    }
+    const reader = response.body?.getReader();
+    if (!reader)
+      throw new NodeRedError("The npm registry returned an empty tarball.", true);
+    const chunks: Uint8Array[] = [];
+    const hash = createHash("sha512");
+    let received = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        if (received > TARBALL_LIMIT)
+          throw new NodeRedError(
+            "The reviewed package exceeds the 25 MiB installation limit.",
+            true,
+          );
+        hash.update(value);
+        chunks.push(value);
+      }
+      const actual = hash.digest();
+      if (!timingSafeEqual(actual, expected))
+        throw new NodeRedError(
+          "The downloaded package does not match the reviewed SHA-512 integrity. No Node-RED installation request was sent.",
+          true,
+        );
+      return new Blob(chunks, { type: "application/x-compressed-tar" });
+    } catch (error) {
+      await reader.cancel().catch(() => {});
+      if (error instanceof NodeRedError) throw error;
+      throw new NodeRedError(
+        "The reviewed npm tarball could not be verified. No Node-RED installation request was sent.",
+        true,
+      );
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
+  async installTarball(
+    selection: { module: string; version: string },
+    tarball: Blob,
+  ) {
+    const input = packageSelection.parse(selection);
+    const filename = `${input.module.replace(/^@/, "").replaceAll("/", "-")}-${input.version}.tgz`;
+    const form = new FormData();
+    form.append("tarball", tarball, filename);
+    // Node-RED's Admin API supports exact tarball uploads as multipart/form-data.
+    // It does not accept version qualifiers in the JSON module-name form.
+    return this.request("/nodes", { body: form });
   }
 
   async packageMetadata(selection: { module: string; version: string }) {
@@ -277,6 +377,10 @@ export class NodeRedClient {
             .record(z.string().max(160), z.string().max(1024))
             .optional(),
         }),
+        dist: z.object({
+          tarball: z.string().url().max(2048),
+          integrity: z.string().max(256),
+        }),
       })
       .safeParse(raw);
     if (!parsed.success)
@@ -292,12 +396,32 @@ export class NodeRedClient {
       throw new NodeRedError(
         "The package does not declare a supported set of Node-RED nodes or plugins.",
       );
+    const tarballUrl = new URL(parsed.data.dist.tarball);
+    const integrity = parsed.data.dist.integrity
+      .split(/\\s+/)
+      .find((value) => value.startsWith("sha512-"));
+    if (
+      tarballUrl.protocol !== "https:" ||
+      tarballUrl.hostname !== "registry.npmjs.org" ||
+      tarballUrl.port ||
+      tarballUrl.username ||
+      tarballUrl.password ||
+      tarballUrl.search ||
+      tarballUrl.hash ||
+      !integrity ||
+      !/^sha512-[A-Za-z0-9+/]{86}==$/.test(integrity)
+    )
+      throw new NodeRedError(
+        "The npm registry did not provide a supported official SHA-512 package tarball.",
+      );
     const clean = (text: string) =>
-      text.replace(/[\u0000-\u001f\u007f]/g, " ").slice(0, 500);
+      text.replace(/[\\u0000-\\u001f\\u007f]/g, " ").slice(0, 500);
     return {
       description: clean(parsed.data.description ?? ""),
       nodeSets: nodeSets.map(clean),
       pluginSets: pluginSets.map(clean),
+      tarballUrl: tarballUrl.href,
+      integrity,
     };
   }
 }
