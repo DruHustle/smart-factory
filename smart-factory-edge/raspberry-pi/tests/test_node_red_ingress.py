@@ -35,6 +35,20 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
         accepted = forward_local_message(self.settings(approved), sender, message)
         return accepted, captured
 
+    def publish_raw(self, payload, approved=(), retained=False):
+        captured = []
+        sender = types.SimpleNamespace(
+            publish=lambda topic, encoded, **kwargs:
+                captured.append(json.loads(encoded)) or types.SimpleNamespace(rc=0)
+        )
+        message = types.SimpleNamespace(
+            topic=telemetry_topic("fixture", "line", "node-red-source-01"),
+            payload=payload,
+            retain=retained,
+        )
+        accepted = forward_local_message(self.settings(approved), sender, message)
+        return accepted, captured
+
     def test_node_red_requires_separate_explicit_source_allowlist(self):
         base = {"LOCAL_MQTT_ENABLED": "true", "LOCAL_MQTT_DEVICE_IDS": "node-red-source-01",
                 "NODE_RED_SOURCE_IDS": "node-red-source-01"}
@@ -77,6 +91,20 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
         payload.pop("observation")
         payload["action"] = "start_motor"
         self.assertFalse(self.publish(payload)[0])
+
+    def test_duplicate_json_keys_are_rejected_at_every_telemetry_nesting_level(self):
+        # Different JSON parsers can choose different values for duplicate
+        # keys. Identity, timestamps and nested signal maps must be unambiguous.
+        payloads = (
+            b'{"deviceId":"attacker","deviceId":"node-red-source-01","timestamp":1793066400000,"temperature":23.5}',
+            b'{"deviceId":"node-red-source-01","timestamp":1,"timestamp":1793066400000,"temperature":23.5}',
+            b'{"deviceId":"node-red-source-01","timestamp":1793066400000,"assetSignals":{"pressure":1,"pressure":2}}',
+        )
+        for payload in payloads:
+            with self.subTest(payload=payload):
+                accepted, messages = self.publish_raw(payload)
+                self.assertFalse(accepted)
+                self.assertEqual(messages, [])
 
     def test_untrusted_status_and_provenance_types_fail_closed(self):
         # MQTT/Node-RED JSON is untrusted: arrays and objects must be rejected
