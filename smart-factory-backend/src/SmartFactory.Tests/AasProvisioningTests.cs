@@ -305,7 +305,7 @@ public sealed class AasProvisioningTests
         private static string BuildEtag(string path, int revision)
         {
             var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(path)))[..8].ToLowerInvariant();
-            return $"\\"{revision}-{digest}-representation\\"";
+            return $"\"{revision}-{digest}-representation\"";
         }
 
         private sealed record StoredResource(string Body, int Revision, string ETag);
