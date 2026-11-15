@@ -123,7 +123,7 @@ function runtimeFixture() {
         throw Error("Bearer secret-value http://private.gateway");
       const form = init.body as FormData;
       const file = form.get("tarball");
-      if (!(file instanceof Blob) || file.type !== "application/x-compressed-tar")
+      if (!(file instanceof File) || file.type !== "application/x-compressed-tar")
         return reply({ message: "Expected a compressed tarball" }, 400);
       const uploaded = Buffer.from(await file.arrayBuffer());
       if (!uploaded.equals(tarball) || file.name !== "fixture-node-red-test-1.2.3.tgz")
