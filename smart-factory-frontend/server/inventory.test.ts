@@ -141,6 +141,13 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
     });
     it("projects MQTT and Node-RED asset freshness and disconnected state from its latest commissioned source", async () => {
       const db = (await getDb())!;
+      const olderSource = await registerDevice({
+        type: "sensor",
+        deviceId: prefix + "-mqtt-older",
+        name: prefix + " older MQTT source",
+        route: "direct",
+        freshnessSeconds: 5,
+      });
       const source = await registerDevice({
         type: "sensor",
         deviceId: prefix + "-mqtt-source",
@@ -155,8 +162,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       `);
       await db.execute(sql`
         insert into asset_devices("assetId","deviceId",protocol)
-        values(${asset.id},${source.id},'mqtt')
+        values
+          (${asset.id},${olderSource.id},'mqtt'),
+          (${asset.id},${source.id},'mqtt')
       `);
+      await db.execute(sql`update devices set status='offline',"lastSeen"=now()-interval '2 minutes' where id=${olderSource.id}`);
+      await db.execute(sql`update asset_devices set "lastSeen"=now()-interval '2 minutes' where "assetId"=${asset.id} and "deviceId"=${olderSource.id}`);
       await ingestTelemetryByDeviceId({
         deviceId: source.deviceId,
         assetId: asset.assetId,
