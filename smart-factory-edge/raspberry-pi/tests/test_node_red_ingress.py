@@ -109,6 +109,7 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
     def test_gateway_owns_local_mqtt_integration_provenance(self):
         settings = self.settings()
         settings.local_mqtt_device_ids = ("wrover-01",)
+        settings.local_mqtt_control_device_ids = ("wrover-01",)
         settings.node_red_source_ids = ()
         settings.node_red_approved_live_ids = ()
         topic = telemetry_topic("fixture", "line", "wrover-01")
