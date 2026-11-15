@@ -27,7 +27,7 @@ export const packageSelection = z
   .strict();
 export const installRequest = z
   .object({
-    reviewToken: z.string().min(1).max(2048),
+    reviewToken: z.string().min(1).max(4096),
     requestId: z.string().uuid(),
     acknowledgeCodeExecution: z.literal(true),
   })
@@ -82,6 +82,7 @@ export type PackageReview = {
   nodeSets: string[];
   pluginSets: string[];
   reviewToken: string;
+  integrity: string;
   expiresAt: string;
 };
 export const pendingInstall = (operation: InstallOperation | null) =>

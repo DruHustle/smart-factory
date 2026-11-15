@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   packageSelection,
@@ -69,6 +69,11 @@ function runtimeFixture() {
   let failReadback = false;
   let pluginOnly = false;
   let wrongVersion = false;
+  let tamperTarball = false;
+  let allowUpload = true;
+  const tarball = Buffer.from("synthetic-node-red-package-tarball");
+  const integrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
+  let tarballUrl = "https://registry.npmjs.org/@fixture/node-red-test/-/node-red-test-1.2.3.tgz";
   const calls: { url: string; init: RequestInit }[] = [];
   const entry = () => ({
     module: selection.module,
@@ -94,6 +99,12 @@ function runtimeFixture() {
   const fetcher: typeof fetch = vi.fn(async (input, init = {}) => {
     const url = String(input);
     calls.push({ url, init });
+    if (url === tarballUrl) {
+      const bytes = tamperTarball ? Buffer.from("tampered-package") : tarball;
+      return new Response(bytes, {
+        headers: { "content-type": "application/octet-stream", "content-length": String(bytes.length) },
+      });
+    }
     if (url.startsWith("https://registry.npmjs.org/"))
       return reply({
         name: selection.module,
@@ -102,6 +113,7 @@ function runtimeFixture() {
         "node-red": pluginOnly
           ? { plugins: { test: "plugin.js" } }
           : { nodes: { test: "node.js" } },
+        dist: { tarball: tarballUrl, integrity },
       });
     if (init.method === "POST") {
       postCount++;
@@ -109,6 +121,13 @@ function runtimeFixture() {
         return reply({ message: "Bearer secret-value" }, 401);
       if (postFailure === "lost")
         throw Error("Bearer secret-value http://private.gateway");
+      const form = init.body as FormData;
+      const file = form.get("tarball");
+      if (!(file instanceof File) || file.type !== "application/x-compressed-tar")
+        return reply({ message: "Expected a compressed tarball" }, 400);
+      const uploaded = Buffer.from(await file.arrayBuffer());
+      if (!uploaded.equals(tarball) || file.name !== "fixture-node-red-test-1.2.3.tgz")
+        return reply({ message: "Unexpected package archive" }, 400);
       installed = true;
       return reply(module());
     }
@@ -122,7 +141,7 @@ function runtimeFixture() {
           palette: {
             allowInstall: true,
             allowUpdate: false,
-            allowUpload: false,
+            allowUpload,
           },
         },
       });
@@ -154,6 +173,24 @@ function runtimeFixture() {
     },
     set wrongVersion(value: boolean) {
       wrongVersion = value;
+    },
+    set tamperTarball(value: boolean) {
+      tamperTarball = value;
+    },
+    set allowUpload(value: boolean) {
+      allowUpload = value;
+    },
+    get tarball() {
+      return tarball;
+    },
+    get integrity() {
+      return integrity;
+    },
+    get tarballUrl() {
+      return tarballUrl;
+    },
+    set tarballUrl(value: string) {
+      tarballUrl = value;
     },
   };
 }
@@ -257,6 +294,13 @@ describe("Node-RED package input and transport boundary", () => {
       nodeRedConfiguration({ ...env, ENABLE_DEMO_ACCOUNTS: "true" }),
     ).toThrow(/private installation/);
   });
+  it("refuses a runtime that cannot accept the verified tarball upload", async () => {
+    const runtime = runtimeFixture();
+    runtime.allowUpload = false;
+    const client = new NodeRedClient(config(), runtime.fetcher);
+    await expect(client.checkRuntime()).rejects.toThrow(/tarball uploads/);
+    expect(runtime.posts).toBe(0);
+  });
   it("does not follow redirects or expose the credential in public status", async () => {
     const runtime = runtimeFixture(),
       store = memoryStore();
@@ -329,11 +373,17 @@ describe("Node-RED reviewed install and recovery", () => {
       expect(runtime.posts).toBe(1);
       const post = runtime.calls.find((call) => call.init.method === "POST")!;
       expect(post.url).toBe(env.NODE_RED_ADMIN_URL + "/nodes");
-      expect(JSON.parse(String(post.init.body))).toEqual(selection);
+      const form = post.init.body as FormData;
+      const file = form.get("tarball") as File;
+      expect(file.name).toBe("fixture-node-red-test-1.2.3.tgz");
+      expect(file.type).toBe("application/x-compressed-tar");
+      expect(Buffer.from(await file.arrayBuffer())).toEqual(runtime.tarball);
       const registry = runtime.calls.find((call) =>
-        call.url.startsWith("https://registry.npmjs.org/"),
+        call.url.startsWith("https://registry.npmjs.org/") && !call.url.endsWith(".tgz"),
       )!;
       expect(registry.init.headers).not.toHaveProperty("Authorization");
+      const tarballRequest = runtime.calls.find((call) => call.url === runtime.tarballUrl)!;
+      expect(tarballRequest.init.headers).not.toHaveProperty("Authorization");
       const replay = await service.install(7, request);
       expect(replay.id).toBe(operation.id);
       expect(replay.state).toBe("installed");
@@ -341,6 +391,39 @@ describe("Node-RED reviewed install and recovery", () => {
       expect(JSON.stringify(replay)).not.toContain("/private/");
     },
   );
+  it("accepts the full bounded signed review token for a long registry tarball URL", async () => {
+    const store = memoryStore(), runtime = runtimeFixture();
+    runtime.tarballUrl = "https://registry.npmjs.org/" + "x".repeat(1_850) + ".tgz";
+    const service = new NodeRedPackageService(store, config, runtime.fetcher);
+    const review = await service.review(7, selection);
+    expect(review.reviewToken.length).toBeGreaterThan(2_048);
+    const operation = await service.install(7, {
+      requestId: randomUUID(),
+      reviewToken: review.reviewToken,
+      acknowledgeCodeExecution: true,
+    });
+    expect(operation.state).toBe("installing");
+    expect((await settled(store)).state).toBe("installed");
+    expect(runtime.posts).toBe(1);
+  });
+  it("rejects package metadata that points outside the official npm tarball host", async () => {
+    const runtime = runtimeFixture();
+    runtime.tarballUrl = "https://attacker.example/package.tgz";
+    const service = new NodeRedPackageService(memoryStore(), config, runtime.fetcher);
+    await expect(service.review(7, selection)).rejects.toThrow(/official SHA-512/);
+    expect(runtime.calls.some((call) => call.url.startsWith("https://attacker.example/"))).toBe(false);
+    expect(runtime.posts).toBe(0);
+  });
+  it("refuses to install a tarball whose bytes differ from the reviewed SHA-512", async () => {
+    const store = memoryStore(), runtime = runtimeFixture();
+    runtime.tamperTarball = true;
+    const service = new NodeRedPackageService(store, config, runtime.fetcher);
+    const { review } = await start(service);
+    expect(review.integrity).toBe(runtime.integrity);
+    expect((await settled(store)).state).toBe("failed");
+    expect(runtime.posts).toBe(0);
+    expect(runtime.calls.some((call) => call.url === runtime.tarballUrl)).toBe(true);
+  });
   it("binds the review to the administrator and target configuration", async () => {
     const store = memoryStore(),
       runtime = runtimeFixture();

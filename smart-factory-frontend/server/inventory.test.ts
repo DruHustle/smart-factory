@@ -139,6 +139,70 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       });
       expect(await getAssetsForDevice(d.id)).toEqual([]);
     });
+    it("projects MQTT and Node-RED asset freshness and disconnected state from its latest commissioned source", async () => {
+      const db = (await getDb())!;
+      const olderSource = await registerDevice({
+        type: "sensor",
+        deviceId: prefix + "-mqtt-older",
+        name: prefix + " older MQTT source",
+        route: "direct",
+        freshnessSeconds: 5,
+      });
+      const source = await registerDevice({
+        type: "sensor",
+        deviceId: prefix + "-mqtt-source",
+        name: prefix + " MQTT source",
+        route: "direct",
+        freshnessSeconds: 30,
+      });
+      const [asset] = await db.execute<{ id: number; assetId: string }>(sql`
+        insert into assets("assetId",name,"assetType","aasShell")
+        values(${prefix + "-mqtt-asset"},${prefix + " MQTT asset"},'pump','{}'::json)
+        returning id,"assetId"
+      `);
+      await db.execute(sql`
+        insert into asset_devices("assetId","deviceId",protocol)
+        values
+          (${asset.id},${olderSource.id},'mqtt'),
+          (${asset.id},${source.id},'mqtt')
+      `);
+      await db.execute(sql`update devices set status='offline',"lastSeen"=now()-interval '2 minutes' where id=${olderSource.id}`);
+      await db.execute(sql`update asset_devices set "lastSeen"=now()-interval '2 minutes' where "assetId"=${asset.id} and "deviceId"=${olderSource.id}`);
+      await ingestTelemetryByDeviceId({
+        deviceId: source.deviceId,
+        assetId: asset.assetId,
+        timestamp: Date.now() - 100,
+        temperature: 21,
+        units: { temperature: "°C" },
+        integration: {
+          mode: "live",
+          sourceQuality: "good",
+          sourceConnection: "online",
+          gatewayReceivedAt: new Date().toISOString(),
+        },
+      });
+
+      const findAsset = async () => {
+        const result = await listInventory(
+          inventoryFilter.parse({ search: asset.assetId, view: "assets" }),
+        );
+        expect(result.items).toHaveLength(1);
+        return result.items[0];
+      };
+      expect(await findAsset()).toMatchObject({
+        freshnessMs: 30000,
+        reported: "online",
+        status: "live",
+        mode: "live",
+      });
+
+      await db.execute(sql`update devices set status='offline' where id=${source.id}`);
+      expect(await findAsset()).toMatchObject({ reported: "offline", status: "offline" });
+
+      await db.execute(sql`update devices set "lastSeen"=now()-interval '60 seconds' where id=${source.id}`);
+      await db.execute(sql`update asset_devices set "lastSeen"=now()-interval '60 seconds' where "assetId"=${asset.id} and "deviceId"=${source.id}`);
+      expect(await findAsset()).toMatchObject({ reported: "offline", status: "stale" });
+    });
     it("returns the same status used by the database filter when clocks differ", async () => {
       const sensor = await registerDevice({
         type: "sensor", deviceId: prefix + "-clock", name: prefix + " clock",

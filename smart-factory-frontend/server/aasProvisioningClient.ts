@@ -109,6 +109,29 @@ export class AasProvisioningRequestError extends Error {
   }
 }
 
+export class DeviceServiceUnavailableError extends Error {
+  readonly statusCode = 503;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "DeviceServiceUnavailableError";
+  }
+}
+
+async function throwDeviceServiceUnavailable(response: Response, fallback: string): Promise<never> {
+  let message = fallback;
+  try {
+    const body: unknown = await response.json();
+    if (body && typeof body === "object" && "error" in body &&
+        typeof body.error === "string" && body.error.length <= 512) {
+      message = body.error;
+    }
+  } catch {
+    // Keep the safe fallback when the upstream response is not JSON.
+  }
+  throw new DeviceServiceUnavailableError(message);
+}
+
 /** Forward the original multipart stream body to the private .NET AASX importer. */
 export async function importAasxPackage(body: Buffer, contentType: string): Promise<AasxImportResult> {
   const baseUrl = getProvisioningUrl();
@@ -245,6 +268,7 @@ export async function publishAda031Control(input: {
     signal: AbortSignal.timeout(10_000),
   });
   if (response.status === 401 || response.status === 403) throw new Error("DeviceService rejected the engineer authorization");
+  if (response.status === 503) await throwDeviceServiceUnavailable(response, "ADA031 physical command is not commissioned");
   if (!response.ok) throw new Error(`ADA031 command publication failed (HTTP ${response.status})`);
   const result: unknown = await response.json();
   if (!result || typeof result !== "object" || !("published" in result) || result.published !== true) {
@@ -274,6 +298,7 @@ export async function publishWroverIndicator(input: {
     signal: AbortSignal.timeout(10_000),
   });
   if (response.status === 401 || response.status === 403) throw new Error("DeviceService rejected the operator authorization");
+  if (response.status === 503) await throwDeviceServiceUnavailable(response, "WROVER indicator control is not commissioned");
   if (!response.ok) throw new Error(`WROVER indicator publication failed (HTTP ${response.status})`);
   const result: unknown = await response.json();
   if (!result || typeof result !== "object" || !("published" in result) || result.published !== true) {

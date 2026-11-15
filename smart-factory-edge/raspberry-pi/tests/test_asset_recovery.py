@@ -6,7 +6,8 @@ from pathlib import Path
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
-from asset_adapters import SerialJsonConnectionManager, _decode_registers, _read_modbus_mappings, validate_asset_profile
+from asset_adapters import SerialJsonConnectionManager, _decode_registers, _read_modbus_mappings, _serial_record_values, validate_asset_profile
+from measurement_units import mapped_value, valid_mapping
 
 
 class AssetRecoveryTests(unittest.TestCase):
@@ -44,6 +45,44 @@ class AssetRecoveryTests(unittest.TestCase):
                 {"assetId": "fixture", "protocol": "modbus_tcp", "endpoint": "tcp://127.0.0.1:1502", "tagMappings": [mapping]}]}
             with self.subTest(fields=fields), self.assertRaises(ValueError):
                 validate_asset_profile(profile, "pi-edge-01")
+
+    def test_asset_mapping_rejects_overflowing_and_unhashable_configuration(self):
+        for field, value in (
+            ("scale", 10 ** 500),
+            ("offset", 10 ** 500),
+            ("scale", 1e300),
+            ("unit", {}),
+            ("unit", []),
+        ):
+            mapping = {"metric": "pressure", "address": 0, field: value}
+            profile = {"schemaVersion": 1, "gatewayDeviceId": "pi-edge-01", "assets": [
+                {"assetId": "fixture", "protocol": "modbus_tcp", "endpoint": "tcp://127.0.0.1:1502", "tagMappings": [mapping]}]}
+            with self.subTest(field=field, value=repr(value)), self.assertRaises(ValueError):
+                validate_asset_profile(profile, "pi-edge-01")
+
+    def test_raw_and_serial_numeric_overflow_fails_as_validation_not_overflow_error(self):
+        for raw in (10 ** 500, float("inf"), float("nan"), True):
+            with self.subTest(raw=repr(raw)), self.assertRaises(ValueError):
+                mapped_value({}, "pressure", raw, {"scale": 1.0, "offset": 0.0}, "native")
+            with self.subTest(serial_raw=repr(raw)), self.assertRaises(ValueError):
+                _serial_record_values({"pressure": raw}, [{"metric": "pressure", "source": "pressure"}])
+
+        with self.assertRaises(ValueError):
+            _serial_record_values({"signals": {"counter": 10 ** 500}}, [])
+
+    def test_mapping_validator_rejects_unrepresentable_output_integer(self):
+        mapping = {"pressure": {
+            "rawValue": 3.0, "rawUnit": "register", "scale": 1.0,
+            "offset": 0.0, "version": "sf-mapping-v1",
+        }}
+        self.assertFalse(valid_mapping(mapping, {"pressure": "bar"}, {"pressure": 10 ** 500}))
+
+    def test_bounded_engineering_mapping_still_converts_valid_values(self):
+        output = {}
+        mapped_value(output, "pressure", 742, {"scale": 0.01, "offset": 0.25, "unit": "bar"}, "register")
+        self.assertEqual(output["pressure"], 7.67)
+        self.assertEqual(output["units"]["pressure"], "bar")
+        self.assertEqual(output["mapping"]["pressure"]["rawValue"], 742.0)
 
     def test_modbus_width_sign_and_word_order_preserve_values(self):
         self.assertEqual(_decode_registers([65535], {"dataType": "INT16"}), -1)

@@ -42,9 +42,21 @@ const projection = (mode: Filter["mode"] = "all") => sql`with inventory as (
  select 'asset:'||a.id as ref,'asset' as kind,a.id::text as id,a.name,a."assetId" as identifier,a."assetType"::text as "itemType",a.location,a.zone,
  exists(select 1 from asset_devices c where c."assetId"=a.id) as configured,
  case when exists(select 1 from asset_devices c where c."assetId"=a.id and c.protocol='mqtt_direct') then 'Direct MQTT' when exists(select 1 from asset_devices c where c."assetId"=a.id) then 'Linked devices' else 'Not configured' end as route,null::text as "gatewayId",
- null::text as reported,(select case when bool_and(c.protocol='ada031_v4_serial') then 120000::bigint else null end from asset_devices c where c."assetId"=a.id) as "freshnessMs",(select max(c."lastSeen") from asset_devices c where c."assetId"=a.id) as "lastObserved",r.timestamp as "sampleAt",coalesce(r.integration->>'mode','unknown') as mode,
+ source_state.reported,source_state."freshnessMs",source_state."lastObserved",r.timestamp as "sampleAt",coalesce(r.integration->>'mode','unknown') as mode,
  coalesce(r.integration->>'sourceQuality','unknown') as quality,a."lifecycleStage"::text as lifecycle,true as aas,w.id::text as "equipmentId",null::text as firmware,r.measurements,r.values,r.integration->'evidence' as evidence,a."isDemo" as "isDemo",r."deviceId" as "observationDeviceId"
  from assets a left join equipment_workspaces w on w.asset_id=a.id and ${visibleRecordSql(sql`w.is_demo`)}
+ left join lateral(
+   select linked_device.status::text as reported,
+     coalesce(${deviceFreshnessSql(sql`linked_device.metadata`)},case when asset_link.protocol='ada031_v4_serial' then 120000::bigint else null end) as "freshnessMs",
+     greatest(asset_link."lastSeen",linked_device."lastSeen") as "lastObserved"
+   from asset_devices asset_link
+   join devices linked_device on linked_device.id=asset_link."deviceId"
+   where asset_link."assetId"=a.id
+     and ${visibleRecordSql(sql`linked_device."isDemo"`)}
+     and (${deviceFreshnessSql(sql`linked_device.metadata`)} is not null or asset_link.protocol='ada031_v4_serial')
+   order by greatest(asset_link."lastSeen",linked_device."lastSeen") desc nulls last,asset_link.id desc
+   limit 1
+ ) source_state on true
  left join lateral(select "deviceId",timestamp,integration,measurements,jsonb_build_object('temperature',temperature,'humidity',humidity,'vibration',vibration,'power',power,'pressure',pressure,'rpm',rpm) as values from sensor_readings where exists(select 1 from devices observed_source where observed_source.id=sensor_readings."deviceId" and ${visibleRecordSql(sql`observed_source."isDemo"`)}) and "assetId"=a."assetId" and timestamp<=${Date.now()} and ${evidenceSql(mode, sql`integration`)} order by timestamp desc,id desc limit 1) r on true
  where ${visibleRecordSql(sql`a."isDemo"`)} and not exists(select 1 from equipment_workspaces sw where sw.asset_id=a.id and sw.is_standalone=true)
  union all
