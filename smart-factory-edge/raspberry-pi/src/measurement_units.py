@@ -33,7 +33,7 @@ def valid_mapping(mapping, units, values):
     if not isinstance(mapping, dict) or len(mapping) > 6 or not valid_units(units): return False
     for metric, item in mapping.items():
         if metric not in units or metric not in values or not isinstance(item, dict) or set(item) != {"rawValue", "rawUnit", "scale", "offset", "version"}: return False
-        if item["rawUnit"] not in {"register", "native"} or item["version"] != "sf-mapping-v1": return False
+        if not isinstance(item["rawUnit"], str) or item["rawUnit"] not in {"register", "native"} or item["version"] != "sf-mapping-v1": return False
         for key, bound in (("rawValue", 9007199254740991), ("scale", 1e9), ("offset", 1e9)):
             value=item[key]
             if isinstance(value,bool) or not isinstance(value,(int,float)) or not math.isfinite(value) or abs(value)>bound:return False
