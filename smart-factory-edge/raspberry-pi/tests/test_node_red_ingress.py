@@ -110,6 +110,27 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
                 self.assertFalse(accepted)
                 self.assertEqual(messages, [])
 
+    def test_ingress_enforces_backend_metric_and_named_signal_bounds(self):
+        invalid_records = (
+            {"temperature": 1_000_000_001},
+            {"vibration": -1_000_000_001},
+            {"power": 1e300},
+            {"pressure": -1e300},
+            {"rpm": 1_000_000_001},
+            {"humidity": 100.1},
+            {"assetSignals": {"counter": 4_294_967_296}},
+            {"assetSignals": {"counter": 10 ** 500}},
+        )
+        for invalid_fields in invalid_records:
+            with self.subTest(fields=invalid_fields):
+                accepted, messages = self.publish({
+                    "deviceId": "node-red-source-01",
+                    "timestamp": 1793066400000,
+                    **invalid_fields,
+                })
+                self.assertFalse(accepted)
+                self.assertEqual(messages, [])
+
     def test_untrusted_engineering_mapping_unit_type_is_rejected(self):
         for invalid in ([], {}, None, False, 5):
             with self.subTest(raw_unit=invalid):
