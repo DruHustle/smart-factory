@@ -139,6 +139,22 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       });
       expect(await getAssetsForDevice(d.id)).toEqual([]);
     });
+    it("returns the same status used by the database filter when clocks differ", async () => {
+      const sensor = await registerDevice({
+        type: "sensor", deviceId: prefix + "-clock", name: prefix + " clock",
+        route: "direct", freshnessSeconds: 30,
+      });
+      const db = (await getDb())!;
+      await db.execute(sql`update devices set status='online', "lastSeen"=now() where id=${sensor.id}`);
+      const appClock = vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60000);
+      try {
+        const result = await listInventory(inventoryFilter.parse({ search: sensor.deviceId, status: "live" }));
+        expect(result.total).toBe(1);
+        expect(result.items[0].status).toBe("live");
+      } finally {
+        appClock.mockRestore();
+      }
+    });
     it("preserves every gateway relationship and consolidates an explicit 3D representation", async () => {
       const db = (await getDb())!;
       const g = await registerDevice({
