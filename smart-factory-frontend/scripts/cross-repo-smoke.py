@@ -160,12 +160,13 @@ def main():
             assert load_asset_connections(profile_path, gateway_id)[0]['assetId'] == asset_id
             print('PASS: Node asset creation -> .NET -> live BaSyx registration -> MQTT -> persisted Pi profile', flush=True)
 
-            result = trpc(opener, 'assets.controlAda031', {
+            status, blocked = http(opener, '/api/trpc/assets.controlAda031', {'json': {
                 'id': asset['id'],
                 'command': {'action': 'jog', 'joint': 'base', 'direction': 'increase'},
-            })
-            eventually(lambda: writes == [b'o'], 'exact serial command byte')
-            eventually(lambda: any_ack(acknowledgements, result['commandId'], 'serial_write_accepted'), 'serial acknowledgement')
+            }})
+            assert status == 503, (status, blocked)
+            assert writes == [], writes
+            assert acknowledgements.empty(), 'a blocked physical command must not produce a device acknowledgement'
             trpc(opener, 'devices.create', {'deviceId': 'review-sensor', 'name': 'Review sensor', 'type': 'sensor', 'route': 'gateway', 'gatewayId': gateway_id})
             trpc(opener, 'auth.logout', None)
             trpc(opener, 'auth.login', {'email': 'security-viewer@example.test', 'password': 'Synthetic-security-only-2026!'})
@@ -174,7 +175,7 @@ def main():
                 'command': {'action': 'jog', 'joint': 'base', 'direction': 'increase'},
             }})
             assert status == 403, status
-            print('PASS: engineer command -> MQTT -> allowlisted simulated serial write/ack; viewer receives 403', flush=True)
+            print('PASS: engineer physical command is blocked before MQTT/serial publication without operator-led hardware qualification; viewer receives 403', flush=True)
 
             producer = DurablePublisher(gateway, state)
             timestamp = int(time.time() * 1000)
