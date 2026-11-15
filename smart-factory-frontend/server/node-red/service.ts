@@ -216,7 +216,11 @@ export class NodeRedPackageService {
     return claimed.operation;
   }
 
-  private async run(operation: InstallOperation, config: NodeRedConfiguration, reviewed: ReviewPayload) {
+  private async run(
+    operation: InstallOperation,
+    config: NodeRedConfiguration,
+    reviewed: ReviewPayload,
+  ) {
     const client = this.client(config);
     const selection = { module: operation.module, version: operation.version };
     let transmitted = false;
