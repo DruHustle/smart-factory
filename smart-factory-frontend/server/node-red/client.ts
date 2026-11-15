@@ -170,9 +170,9 @@ export class NodeRedClient {
         "Use a dedicated Node-RED token with only the reviewed package-management permissions.",
       );
     const palette = settings.externalModules.palette;
-    if (!palette.allowInstall || palette.allowUpdate || palette.allowUpload)
+    if (!palette.allowInstall || palette.allowUpdate || !palette.allowUpload)
       throw new NodeRedError(
-        "Node-RED must allow package additions and refuse package updates and archive uploads through this management route.",
+        "Node-RED must allow package additions and verified tarball uploads while refusing package updates.",
       );
   }
 
