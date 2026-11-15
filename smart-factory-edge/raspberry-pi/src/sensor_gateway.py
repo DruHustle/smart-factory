@@ -77,6 +77,21 @@ def command_topic(site_id: str, line_id: str, device_id: str) -> str:
     return encoded_topic(site_id,line_id,device_id,"commands")
 
 
+def _unique_json_object(pairs):
+    """Reject duplicate JSON object keys at every nesting level.
+
+    MQTT payloads cross multiple parsers (Node-RED, the gateway and API).
+    Accepting duplicate keys makes identity, timestamps and measurements
+    dependent on each parser's first/last-key policy.
+    """
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("Duplicate JSON object key")
+        result[key] = value
+    return result
+
+
 def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
     """Accept only bounded telemetry from configured sensor identities and topics."""
     if len(payload) > 16 * 1024:
@@ -94,8 +109,8 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
     if not all(valid_identity(value) for value in (site_id,line_id,device_id)) or kind not in {"telemetry", "heartbeat"} or device_id not in settings.local_mqtt_device_ids:
         return False
     try:
-        record = json.loads(payload.decode("utf-8", errors="strict"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        record = json.loads(payload.decode("utf-8", errors="strict"), object_pairs_hook=_unique_json_object)
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return False
     if not isinstance(record, dict) or record.get("deviceId") != device_id:
         return False
