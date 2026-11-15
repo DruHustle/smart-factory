@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "./db";
 import { visibleRecordSql } from "./demoData";
-import { observedStatus, type InventoryItem } from "../shared/inventory";
+import type { InventoryItem } from "../shared/inventory";
 import { router, viewerProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import { deviceFreshnessSql } from "./deviceFreshness";
@@ -76,7 +76,6 @@ const normalize = (r: any): InventoryItem => ({
   lastObserved: r.lastObserved ? new Date(r.lastObserved).toISOString() : null,
   sampleAt: r.sampleAt == null ? null : Number(r.sampleAt),
   freshnessMs: r.freshnessMs == null ? null : Number(r.freshnessMs),
-  status: observedStatus(r),
 });
 async function normalizeRows(db: ApplicationDatabase, rows: any[]) {
   const continuity = await sourceContinuity(
