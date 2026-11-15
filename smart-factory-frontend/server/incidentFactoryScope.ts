@@ -29,7 +29,7 @@ export function incidentFactoryCondition(factoryId?: string) {
         select 1 from factory_items fi
         left join assets fa on fa.id=fi.asset_id
         where fi.factory_id=${factoryId}::uuid and (
-          fi.device_id=alerts."deviceId"
+          (alerts."assetId" is null and fi.device_id=alerts."deviceId")
           or (fa."assetId"=alerts."assetId" and ${visibleRecordSql(sql`fa."isDemo"`)})
           or (alerts."assetId" is null and ${visibleRecordSql(sql`fa."isDemo"`)} and exists (
             select 1 from asset_devices ad join devices sd on sd.id=ad."deviceId"
