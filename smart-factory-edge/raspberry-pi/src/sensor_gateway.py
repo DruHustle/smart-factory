@@ -52,7 +52,7 @@ def gateway_observation(mode="live", quality="good"):
     return normalize_provenance(result)
 
 def source_observation(value):
-    return isinstance(value,dict) and set(value)=={"schemaVersion","mode","sourceQuality","sessionId","sequence"} and type(value.get("schemaVersion")) is int and value["schemaVersion"]==1 and value.get("mode")=="live" and value.get("sourceQuality") in {"good","bad"} and isinstance(value.get("sessionId"),str) and IDENTIFIER.fullmatch(value["sessionId"]) is not None and isinstance(value.get("sequence"),int) and not isinstance(value["sequence"],bool) and 0<=value["sequence"]<=9007199254740991
+    return isinstance(value,dict) and set(value)=={"schemaVersion","mode","sourceQuality","sessionId","sequence"} and type(value.get("schemaVersion")) is int and value["schemaVersion"]==1 and value.get("mode")=="live" and type(value.get("sourceQuality")) is str and value["sourceQuality"] in {"good","bad"} and isinstance(value.get("sessionId"),str) and IDENTIFIER.fullmatch(value["sessionId"]) is not None and isinstance(value.get("sequence"),int) and not isinstance(value["sequence"],bool) and 0<=value["sequence"]<=9007199254740991
 
 def _finite_number(value) -> bool:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
@@ -102,7 +102,7 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
         return False
 
     if kind == "heartbeat":
-        return set(record) == {"deviceId", "timestamp", "status"} and record.get("status") in {"online", "offline"}
+        return set(record) == {"deviceId", "timestamp", "status"} and isinstance(record.get("status"), str) and record["status"] in {"online", "offline"}
 
     allowed = {"deviceId", "timestamp", "temperature", "humidity", "vibration", "power", "pressure", "rpm", "sensorType", "sensorStatus", "assetId", "assetSignals", "integration", "units", "observation", "mapping"}
     if any(key not in allowed for key in record):
@@ -125,7 +125,7 @@ def _valid_local_payload(topic: str, payload: bytes, settings) -> bool:
             return False
     if "sensorType" in record and (not isinstance(record["sensorType"], str) or not 1 <= len(record["sensorType"]) <= 64):
         return False
-    if "sensorStatus" in record and record["sensorStatus"] not in {"ok", "read_error"}:
+    if "sensorStatus" in record and (not isinstance(record["sensorStatus"], str) or record["sensorStatus"] not in {"ok", "read_error"}):
         return False
     if record.get("sensorType") == "DHT11":
         # The connected WROVER firmware always declares whether the physical
