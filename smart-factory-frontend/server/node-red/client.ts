@@ -316,7 +316,15 @@ export class NodeRedClient {
           "The downloaded package does not match the reviewed SHA-512 integrity. No Node-RED installation request was sent.",
           true,
         );
-      return new Blob(chunks, { type: "application/x-compressed-tar" });
+      // BlobPart excludes Uint8Array<ArrayBufferLike> on current TypeScript DOM
+      // typings. Copy each bounded chunk into an owned ArrayBuffer before Blob
+      // construction so SharedArrayBuffer-backed views cannot leak across APIs.
+      const parts: BlobPart[] = chunks.map((chunk) => {
+        const buffer = new ArrayBuffer(chunk.byteLength);
+        new Uint8Array(buffer).set(chunk);
+        return buffer;
+      });
+      return new Blob(parts, { type: "application/x-compressed-tar" });
     } catch (error) {
       await reader.cancel().catch(() => {});
       if (error instanceof NodeRedError) throw error;
