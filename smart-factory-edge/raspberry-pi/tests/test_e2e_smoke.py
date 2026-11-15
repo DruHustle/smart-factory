@@ -175,6 +175,22 @@ class GatewaySmokeTests(unittest.TestCase):
         _install_dotenv_stub()
         _install_paho_stub()
 
+    def test_serial_json_ingress_rejects_duplicate_object_keys(self):
+        sensor_gateway = importlib.import_module("sensor_gateway")
+        invalid = (
+            '{"deviceId":"first","deviceId":"second","timestamp":1793066400000}',
+            '{"deviceId":"serial-01","timestamp":1793066400000,"signals":{"pressure":3.2,"pressure":4.2}}',
+        )
+        for line in invalid:
+            with self.subTest(line=line), self.assertRaisesRegex(ValueError, "Duplicate JSON object key"):
+                sensor_gateway.parse_serial_line(line)
+
+        valid = sensor_gateway.parse_serial_line(
+            '{"deviceId":"serial-01","timestamp":1793066400000,"signals":{"pressure":3.2}}'
+        )
+        self.assertEqual(valid["deviceId"], "serial-01")
+        self.assertEqual(valid["signals"]["pressure"], 3.2)
+
     def _run_gateway_once(self, serial_enabled: bool, asset_configs=None, asset_reading=None):
         sensor_gateway = importlib.import_module("sensor_gateway")
 
