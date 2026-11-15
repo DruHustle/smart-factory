@@ -1,0 +1,20 @@
+{
+  "expo": {
+    "name": "Smart Factory",
+    "slug": "smart-factory",
+    "scheme": "eu.onesa.factory",
+    "version": "0.1.0",
+    "orientation": "default",
+    "ios": {
+      "bundleIdentifier": "eu.onesa.factory",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "eu.onesa.factory"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-web-browser"
+    ]
+  }
+}
