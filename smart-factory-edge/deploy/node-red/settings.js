@@ -75,7 +75,9 @@ module.exports = {
           palette: {
             allowInstall: true,
             allowUpdate: false,
-            allowUpload: false,
+            // Tarball uploads are required for integrity-pinned installs. The
+            // dedicated service token is private, loopback-only and nodes.write-only.
+            allowUpload: true,
           },
         },
       }
