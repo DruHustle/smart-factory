@@ -80,11 +80,10 @@ def validate_asset_profile(profile: dict, expected_gateway_id: str) -> list[dict
             metric = mapping.get("metric")
             if metric is not None and str(metric).lower() not in SUPPORTED_METRICS:
                 raise ValueError("Tag mapping contains an unsupported metric")
-            if "unit" in mapping and (
-                not isinstance(mapping["unit"], str)
-                or metric not in SOURCE_UNITS
-                or mapping["unit"] not in SOURCE_UNITS[metric]
-            ):
+            unit = mapping.get("unit")
+            if unit is not None and not isinstance(unit, str):
+                raise ValueError("Engineering unit must be a string")
+            if unit and (metric not in SOURCE_UNITS or unit not in SOURCE_UNITS[metric]):
                 raise ValueError("Unsupported engineering unit for metric")
             count = mapping.get("count", 1)
             if isinstance(count, bool) or not isinstance(count, int) or not 1 <= count <= 2:
