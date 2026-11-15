@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import time
 import types
 import unittest
 from pathlib import Path
@@ -8,7 +9,7 @@ from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from config import load_settings
-from sensor_gateway import forward_local_message, forward_local_control_ack, telemetry_topic, heartbeat_topic, encoded_topic
+from sensor_gateway import forward_local_message, forward_local_control_ack, validate_gpio_command, telemetry_topic, heartbeat_topic, encoded_topic
 
 
 class NodeRedTrustBoundaryTests(unittest.TestCase):
@@ -174,6 +175,24 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
         )
         self.assertTrue(forward_local_control_ack(settings, cloud, valid))
         self.assertEqual(len(forwarded), 1)
+
+    def test_boolean_schema_cannot_authorize_gpio_relay(self):
+        settings = self.settings()
+        settings.local_mqtt_control_device_ids = ("wrover-01",)
+        settings.local_mqtt_device_ids = ("wrover-01",)
+        command = {
+            "schemaVersion": 1,
+            "action": "set_gpio",
+            "commandId": "command-123",
+            "targetDeviceId": "wrover-01",
+            "pin": 18,
+            "value": 1,
+            "holdMs": 100,
+            "expiresAt": int(time.time() * 1000) + 10000,
+        }
+        self.assertEqual(validate_gpio_command(settings, command)["pin"], 18)
+        with self.assertRaises(ValueError):
+            validate_gpio_command(settings, {**command, "schemaVersion": True})
 
     def test_explicitly_commissioned_source_still_preserves_broker_retention(self):
         payload = {
