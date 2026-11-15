@@ -371,6 +371,8 @@ describe("Node-RED reviewed install and recovery", () => {
         call.url.startsWith("https://registry.npmjs.org/") && !call.url.endsWith(".tgz"),
       )!;
       expect(registry.init.headers).not.toHaveProperty("Authorization");
+      const tarballRequest = runtime.calls.find((call) => call.url === runtime.tarballUrl)!;
+      expect(tarballRequest.init.headers).not.toHaveProperty("Authorization");
       const replay = await service.install(7, request);
       expect(replay.id).toBe(operation.id);
       expect(replay.state).toBe("installed");
