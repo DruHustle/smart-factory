@@ -108,6 +108,7 @@ def main():
         profile_path = str(Path(temporary) / 'assets.json')
         writes = []
         acknowledgements = queue.Queue()
+        commands = queue.Queue()
         serial_port = types.SimpleNamespace(write=lambda value: writes.append(value) or len(value), flush=lambda: None, close=lambda: None)
         manager = Ada031SerialCommandManager(serial_factory=lambda *a, **k: serial_port, sleeper=lambda _: None, command_state=state)
 
@@ -135,8 +136,18 @@ def main():
             server = start_dashboard()
             watcher = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id='review-watch-' + suffix)
             watcher.username_pw_set('review', 'isolated-review-broker')
-            watcher.on_connect = lambda client, userdata, flags, rc, properties: client.subscribe(command_topic(settings.site_id, settings.line_id, gateway_id) + '/ack', qos=1)
-            watcher.on_message = lambda client, userdata, message: acknowledgements.put(json.loads(message.payload))
+            def watch_topics(client, userdata, flags, rc, properties):
+                if rc == 0:
+                    client.subscribe(command_topic(settings.site_id, settings.line_id, gateway_id), qos=1)
+                    client.subscribe(command_topic(settings.site_id, settings.line_id, gateway_id) + '/ack', qos=1)
+            def capture_gateway_message(client, userdata, message):
+                value = json.loads(message.payload)
+                if message.topic.endswith('/ack'):
+                    acknowledgements.put(value)
+                else:
+                    commands.put(value)
+            watcher.on_connect = watch_topics
+            watcher.on_message = capture_gateway_message
             watcher.connect('127.0.0.1', 51883)
             watcher.loop_start()
             clients.append(watcher)
@@ -158,6 +169,12 @@ def main():
             assert asset['provisioned'] is True and asset['edgeSync'] == 'published', asset
             eventually(lambda: Path(profile_path).is_file(), 'real backend profile applied by Pi')
             assert load_asset_connections(profile_path, gateway_id)[0]['assetId'] == asset_id
+            # Asset creation publishes a retained desired-state profile and the
+            # gateway correctly acknowledges that configuration. Consume that
+            # unrelated acknowledgement before testing the physical-command gate.
+            eventually(lambda: any_applied_configuration_ack(acknowledgements), 'gateway applied asset-profile acknowledgement')
+            drain(acknowledgements)
+            drain(commands)
             print('PASS: Node asset creation -> .NET -> live BaSyx registration -> MQTT -> persisted Pi profile', flush=True)
 
             status, blocked = http(opener, '/api/trpc/assets.controlAda031', {'json': {
@@ -166,6 +183,8 @@ def main():
             }})
             assert status == 503, (status, blocked)
             assert writes == [], writes
+            time.sleep(0.5)
+            assert commands.empty(), 'a blocked physical command must not be published to the gateway'
             assert acknowledgements.empty(), 'a blocked physical command must not produce a device acknowledgement'
             trpc(opener, 'devices.create', {'deviceId': 'review-sensor', 'name': 'Review sensor', 'type': 'sensor', 'route': 'gateway', 'gatewayId': gateway_id})
             trpc(opener, 'auth.logout', None)
@@ -255,5 +274,17 @@ def any_ack(messages, identity, status):
         value = messages.get_nowait()
         if value.get('commandId') == identity and value.get('status') == status: return True
     return False
+
+def any_applied_configuration_ack(messages):
+    found = False
+    while not messages.empty():
+        value = messages.get_nowait()
+        if value.get('status') == 'applied' and isinstance(value.get('configurationHash'), str):
+            found = True
+    return found
+
+def drain(messages):
+    while not messages.empty():
+        messages.get_nowait()
 
 if __name__ == '__main__': main()
