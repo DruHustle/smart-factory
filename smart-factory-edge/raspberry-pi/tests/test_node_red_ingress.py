@@ -194,8 +194,49 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
         valid = types.SimpleNamespace(
             topic=topic, payload=json.dumps(base_ack).encode(), retain=False,
         )
-        self.assertTrue(forward_local_control_ack(settings, cloud, valid))
+        self.assertFalse(forward_local_control_ack(settings, cloud, valid))
+        self.assertTrue(forward_local_control_ack(settings, cloud, valid, transport_verified=True))
         self.assertEqual(len(forwarded), 1)
+
+    def test_control_ack_requires_verified_nonretained_broker_and_exact_firmware_shape(self):
+        settings = self.settings()
+        settings.local_mqtt_control_device_ids = ("wrover-01",)
+        topic = encoded_topic("fixture", "line", "wrover-01", "control-ack")
+        base = {
+            "deviceId": "wrover-01", "commandId": "command-123",
+            "timestamp": 1793066400000, "status": "applied",
+            "pin": 18, "value": 1,
+        }
+        published = []
+        cloud = types.SimpleNamespace(publish=lambda *a, **kw:
+            published.append(a) or types.SimpleNamespace(rc=0))
+        def message(record, retained=False):
+            return types.SimpleNamespace(
+                topic=topic, payload=json.dumps(record).encode(), retain=retained
+            )
+        self.assertFalse(forward_local_control_ack(settings, cloud, message(base)))
+        self.assertFalse(forward_local_control_ack(settings, cloud, message(base, retained=True),
+                                                   transport_verified=True))
+        for fields in (
+            {"action": "set_gpio"}, {"action": ["configure_mqtt_qos"]},
+            {"value": True}, {"value": 2}, {"pin": True}, {"pin": 19},
+            {"reason": {}}, {"reason": "x" * 129}, {"extra": "spoof"},
+        ):
+            with self.subTest(fields=fields):
+                self.assertFalse(forward_local_control_ack(
+                    settings, cloud, message({**base, **fields}), transport_verified=True
+                ))
+        duplicate = json.dumps(base)[:-1] + ', "status": "rejected"}'
+        self.assertFalse(forward_local_control_ack(
+            settings, cloud,
+            types.SimpleNamespace(topic=topic, payload=duplicate.encode(), retain=False),
+            transport_verified=True,
+        ))
+        self.assertEqual(published, [])
+        self.assertTrue(forward_local_control_ack(
+            settings, cloud, message(base), transport_verified=True
+        ))
+        self.assertEqual(len(published), 1)
 
     def test_boolean_schema_cannot_authorize_gpio_relay(self):
         settings = self.settings()
