@@ -326,11 +326,24 @@ def forward_local_control_ack(settings, cloud_client, msg, transport_verified=Fa
     if [site,line]!=[settings.site_id,settings.line_id]:return False
     if device_id not in set(getattr(settings, "local_mqtt_control_device_ids", ())):
         return False
+    # GPIO receipts are operational evidence, not telemetry. A retained
+    # message or unverified local subscription could replay an old "applied"
+    # receipt after reconnection; fail closed before publishing upstream.
+    if not transport_verified or getattr(msg, "retain", False):
+        return False
     if len(msg.payload) > 1024:
         return False
+    def unique_ack_fields(pairs):
+        result = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("Duplicate control acknowledgement field")
+            result[key] = value
+        return result
+
     try:
-        ack = json.loads(msg.payload.decode("utf-8", errors="strict"))
-    except (UnicodeDecodeError, json.JSONDecodeError, RecursionError):
+        ack = json.loads(msg.payload.decode("utf-8", errors="strict"), object_pairs_hook=unique_ack_fields)
+    except (UnicodeDecodeError, ValueError, RecursionError):
         return False
     if not isinstance(ack, dict) or ack.get("deviceId") != device_id:
         return False
@@ -344,7 +357,7 @@ def forward_local_control_ack(settings, cloud_client, msg, transport_verified=Fa
         return False
     if ack.get("action") == "configure_mqtt_qos":
         required = {"action", "deviceId", "commandId", "status", "timestamp", "revision", "requestedRevision", "uplinkQos", "downlinkQos"}
-        if not transport_verified or getattr(msg, "retain", False) or not required.issubset(ack) or set(ack) - required - {"reason"}:
+        if not required.issubset(ack) or set(ack) - required - {"reason"}:
             return False
         if type(ack["requestedRevision"]) is not int or not 1 <= ack["requestedRevision"] <= 0xffffffff:
             return False
@@ -354,8 +367,18 @@ def forward_local_control_ack(settings, cloud_client, msg, transport_verified=Fa
             return False
         if ack["status"] not in {"applied", "rejected"} or ("reason" in ack and (not isinstance(ack["reason"], str) or len(ack["reason"]) > 128)):
             return False
-    pin = ack.get("pin")
-    if pin is not None and (isinstance(pin, bool) or not isinstance(pin, int) or pin not in WROVER_CONTROL_PINS):
+    else:
+        # WROVER firmware emits only these GPIO receipt fields. Reject
+        # unknown actions and extra fields rather than relaying an arbitrary
+        # JSON document under the trusted gateway acknowledgement topic.
+        gpio_fields = {"deviceId", "commandId", "status", "timestamp", "pin", "value", "reason"}
+        if "action" in ack or set(ack) - gpio_fields:
+            return False
+        if "pin" in ack and (type(ack["pin"]) is not int or ack["pin"] not in WROVER_CONTROL_PINS):
+            return False
+        if "value" in ack and (type(ack["value"]) is not int or ack["value"] not in (0, 1)):
+            return False
+    if "reason" in ack and (not isinstance(ack["reason"], str) or len(ack["reason"]) > 128):
         return False
     result = cloud_client.publish(
         encoded_topic(settings.site_id,settings.line_id,settings.device_id,"commands/ack"),
