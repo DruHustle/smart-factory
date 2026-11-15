@@ -109,6 +109,25 @@ class NodeRedTrustBoundaryTests(unittest.TestCase):
                 self.assertFalse(accepted)
                 self.assertEqual(messages, [])
 
+    def test_untrusted_engineering_mapping_unit_type_is_rejected(self):
+        for invalid in ([], {}, None, False, 5):
+            with self.subTest(raw_unit=invalid):
+                accepted, messages = self.publish({
+                    "deviceId": "node-red-source-01",
+                    "timestamp": 1793066400000,
+                    "pressure": 3.0,
+                    "units": {"pressure": "bar"},
+                    "mapping": {"pressure": {
+                        "rawValue": 3.0,
+                        "rawUnit": invalid,
+                        "scale": 1.0,
+                        "offset": 0.0,
+                        "version": "sf-mapping-v1",
+                    }},
+                })
+                self.assertFalse(accepted)
+                self.assertEqual(messages, [])
+
     def test_explicitly_commissioned_source_still_preserves_broker_retention(self):
         payload = {
             "deviceId": "node-red-source-01", "timestamp": 1793066400000,
