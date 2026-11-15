@@ -380,6 +380,21 @@ describe("Node-RED reviewed install and recovery", () => {
       expect(JSON.stringify(replay)).not.toContain("/private/");
     },
   );
+  it("accepts the full bounded signed review token for a long registry tarball URL", async () => {
+    const store = memoryStore(), runtime = runtimeFixture();
+    runtime.tarballUrl = "https://registry.npmjs.org/" + "x".repeat(1_850) + ".tgz";
+    const service = new NodeRedPackageService(store, config, runtime.fetcher);
+    const review = await service.review(7, selection);
+    expect(review.reviewToken.length).toBeGreaterThan(2_048);
+    const operation = await service.install(7, {
+      requestId: randomUUID(),
+      reviewToken: review.reviewToken,
+      acknowledgeCodeExecution: true,
+    });
+    expect(operation.state).toBe("installing");
+    expect((await settled(store)).state).toBe("installed");
+    expect(runtime.posts).toBe(1);
+  });
   it("rejects package metadata that points outside the official npm tarball host", async () => {
     const runtime = runtimeFixture();
     runtime.tarballUrl = "https://attacker.example/package.tgz";
