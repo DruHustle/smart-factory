@@ -91,7 +91,7 @@ def valid_mapping(mapping, units, values):
         if not finite_number(item["offset"], MAX_MAPPING_FACTOR):
             return False
         value = values[metric]
-        if not finite_number(value):
+        if not finite_number(value, MAX_MAPPED_VALUE):
             return False
         expected = float(item["rawValue"]) * float(item["scale"]) + float(item["offset"])
         actual = float(value)
