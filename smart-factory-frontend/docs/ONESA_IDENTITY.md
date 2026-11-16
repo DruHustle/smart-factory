@@ -1,8 +1,10 @@
 # Onesa identity contract
 
 Hosted Smart Factory has a legacy Portal provider mode and an opt-in managed Identity mode. The following configuration describes the legacy provider. See **Managed Identity pilot** below for the managed client.
-**Sign in with Onesa** starts authorization for the requested Factory screen.
-**Register** leads to the Portal registration page. Password and recovery links
+**Continue with Onesa** starts authorization for the requested Factory screen.
+A Portal link may use `/login?returnTo=` with a URL-encoded Factory hash bookmark.
+**Create an Onesa account** and direct `/register` links open the configured
+central registration page. Password and recovery links
 lead to Portal account security. If the issuer is unavailable, keep the
 hosted workspace unavailable for sign-in and restore the Portal connection.
 
