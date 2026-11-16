@@ -24,7 +24,7 @@ test("Onesa sign-in carries a protected destination and keeps a useful retry aft
   await page.route("**/api/auth/onesa/start",async route=>{body=route.request().postDataJSON();await route.fulfill({status:503,json:{error:"unavailable"}});});
   await page.setViewportSize({width:320,height:844});
   await page.goto("/#/monitoring?asset=17");
-  const button=page.getByRole("button",{name:"Sign in with Onesa",exact:true});await expect(button).toBeVisible();await button.click();
+  const button=page.getByRole("button",{name:"Continue with Onesa",exact:true});await expect(button).toBeVisible();await button.click();
   await expect(page.getByText("Onesa sign-in could not be completed. Check your details and try again.")).toBeVisible();
   expect(body.returnTo).toBe("#/monitoring?asset=17");await expect(button).toBeEnabled();
 });
@@ -36,7 +36,7 @@ test("a pending Portal account displays approval status, requests no factory rec
   await expect(page.getByText("member@example.test")).toBeVisible();
   expect(calls.filter(name=>!name.startsWith("auth."))).toEqual([]);
   await page.getByRole("button",{name:"Sign out",exact:true}).click();
-  await expect(page.getByRole("button",{name:"Sign in with Onesa",exact:true})).toBeVisible();
+  await expect(page.getByRole("button",{name:"Continue with Onesa",exact:true})).toBeVisible();
   expect(calls).toContain("auth.logout");
 });
 
@@ -48,7 +48,34 @@ test("hosted Factory delegates registration and recovery through the configured 
   hosted.hostname = "factory.localhost";
   await page.goto(hosted.href);
   await expect(page.getByRole("link", { name: "open your Onesa account" })).toHaveAttribute("href", "/api/auth/onesa/account/login");
-  await page.getByRole("link", { name: "Register", exact: true }).click();
+  await page.getByRole("link", { name: "Create an Onesa account", exact: true }).click();
   await expect(page.getByRole("heading", {name:"Registration route reached"})).toBeVisible();
   await expect(page).toHaveURL(new URL("/api/auth/onesa/account/register",hosted.origin).href);
+});
+
+
+test("a Portal link opens the shared sign-in flow and retains the Factory bookmark", async ({ page, baseURL }) => {
+  await fixture(page);
+  const entry = new URL("/login", baseURL);
+  entry.hostname = "factory.localhost";
+  entry.searchParams.set("returnTo", "#/monitoring?asset=17");
+  await page.route("**/api/auth/onesa/start", route => {
+    expect(route.request().postDataJSON()).toEqual({ returnTo: "#/monitoring?asset=17" });
+    return route.fulfill({json: {url: "https://identity.example.test/authorize"}});
+  });
+  await page.route("https://identity.example.test/authorize", route => route.fulfill({contentType: "text/html", body: "<h1>Onesa sign-in</h1>"}));
+  await page.goto(entry.href);
+  await expect(page.getByLabel("Password", {exact: true})).toHaveCount(0);
+  await page.getByRole("button", {name: "Continue with Onesa", exact: true}).click();
+  await expect(page.getByRole("heading", {name: "Onesa sign-in"})).toBeVisible();
+});
+
+test("a direct hosted registration link opens central Onesa registration", async ({ page, baseURL }) => {
+  await fixture(page);
+  const entry = new URL("/register", baseURL);
+  entry.hostname = "factory.localhost";
+  await page.route("**/api/auth/onesa/account/register", route => route.fulfill({contentType: "text/html", body: "<h1>Create an Onesa account</h1>"}));
+  await page.goto(entry.href);
+  await expect(page.getByRole("heading", {name: "Create an Onesa account"})).toBeVisible();
+  await expect(page).toHaveURL(new URL("/api/auth/onesa/account/register", entry.origin).href);
 });
