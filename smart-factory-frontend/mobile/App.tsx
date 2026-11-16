@@ -185,7 +185,7 @@ export default function App() {
                 .
               </Text>
               <Button
-                title="Sign in with Onesa"
+                title="Continue with Onesa"
                 onPress={login}
                 disabled={busy}
               />

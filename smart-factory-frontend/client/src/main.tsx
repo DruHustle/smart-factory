@@ -26,6 +26,16 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { RuntimeBoundary } from "./components/RuntimeBoundary";
 import "./index.css";
 
+// Account links from other Onesa products may use ordinary paths. Internally,
+// the dashboard keeps routes and their requested destinations in the hash.
+const entry = new URL(window.location.href);
+if (!entry.hash && ["/login", "/register"].includes(entry.pathname)) {
+  entry.hash = entry.pathname + entry.search;
+  entry.pathname = "/";
+  entry.search = "";
+  window.history.replaceState(window.history.state, "", entry);
+}
+
 capturePasswordResetToken();
 window.addEventListener("hashchange", capturePasswordResetToken);
 
