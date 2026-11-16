@@ -5,7 +5,7 @@
  * Uses tRPC authentication with demo account buttons.
  */
 
-import { hostedWorkspace, portalSignIn } from "@/lib/portal-account";
+import { hostedWorkspace, portalRegistration, portalSignIn } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -179,7 +179,9 @@ export default function Login() {
 
           {/* Subtitle */}
           <CardDescription className="text-muted-foreground">
-            Industrial Monitoring & Control Platform
+            {hostedWorkspace
+              ? "Use your existing Onesa account to open Smart Factory."
+              : "Industrial Monitoring & Control Platform"}
           </CardDescription>
         </CardHeader>
 
@@ -190,7 +192,9 @@ export default function Login() {
                 ? "This email already has a Factory account. Enter its email and password below, then link it to your Onesa account."
                 : onesaResult === "mfa"
                   ? "Your Factory administrator role requires a recent second factor. Sign in with Onesa to continue."
-                  : "Onesa sign-in did not complete. Start shared sign-in again."}
+                  : onesaResult === "denied"
+                    ? "Factory could not verify access for this account. Contact your Factory administrator if you need access."
+                    : "Onesa sign-in did not complete. Try again."}
             </p>
           )}
           {(hostedWorkspace || onesaEnabled) && (
@@ -201,7 +205,7 @@ export default function Login() {
                 disabled={isLoading}
                 onClick={() => void signInWithOnesa()}
               >
-                Sign in with Onesa
+                Continue with Onesa
               </Button>
               {!hostedWorkspace && onesaResult === "link" && (
                 <Button
@@ -336,7 +340,11 @@ export default function Login() {
           </div>
 
           <Button asChild variant="outline" className="w-full">
-            <Link href="/register">Register</Link>
+            {hostedWorkspace ? (
+              <a href={portalRegistration}>Create an Onesa account</a>
+            ) : (
+              <Link href="/register">Register</Link>
+            )}
           </Button>
 
           {/* Demo Accounts Section */}
