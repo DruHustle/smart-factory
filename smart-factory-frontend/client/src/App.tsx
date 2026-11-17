@@ -1,4 +1,4 @@
-import { hostedWorkspace, portalRegistration, portalSecurity } from "./lib/portal-account";
+import { hostedWorkspace, portalRegistration, portalSecurity, rememberRegistration } from "./lib/portal-account";
 import { lazy, Suspense, useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "@/components/ui/sonner";
@@ -95,8 +95,9 @@ function LegacyItem({
 function PortalAccountRedirect({ register }: { register: boolean }) {
   const url = register ? portalRegistration : portalSecurity;
   useEffect(() => {
+    if (register) rememberRegistration();
     window.location.replace(url);
-  }, [url]);
+  }, [url, register]);
   return <a href={url}>Continue to your Onesa account</a>;
 }
 
@@ -163,6 +164,7 @@ function AppRouter() {
             its records are available. Share your account email with your
             administrator.
           </p>
+          {user.access.identityRole==="admin" && <p>Your Onesa administrator account is active.</p>}
           <p>{user.email}</p>
           <button className="underline" onClick={() => void logout()}>
             Sign out
