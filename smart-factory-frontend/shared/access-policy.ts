@@ -2,6 +2,7 @@ import { demoAccountsEnabled, isDemoAccount } from "./demo-accounts";
 
 export type AccessIdentity = { email?: string | null; openId: string };
 export type AccountCapabilities = {
+  identityRole?: "user" | "admin";
   provisioningRequired?: boolean;
   demoOnly: boolean;
   canSwitchData?: boolean;

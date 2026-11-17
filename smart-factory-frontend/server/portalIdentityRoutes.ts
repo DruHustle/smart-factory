@@ -30,6 +30,26 @@ const cookieOptions = {
   path: "/",
 };
 class FactoryMfaRequired extends Error {}
+type FactoryTransaction=Parameters<Parameters<Awaited<ReturnType<typeof portalDatabase>>['transaction']>[0]>[0];
+async function createProductAccount(tx:FactoryTransaction,bindingIssuer:string,claim:{sub:string;name:string;email:string}){
+  const [created] = await tx
+    .insert(users)
+    .values({
+      openId: "onesa-" + digest(bindingIssuer + ":" + claim.sub),
+      name: claim.name,
+      email: claim.email.toLowerCase(),
+      password: null,
+      loginMethod: "onesa",
+      role: "viewer",
+    })
+    .onConflictDoNothing()
+    .returning();
+  if (!created) return null;
+  await tx.execute(
+    sql`INSERT INTO onesa_factory_links(issuer,subject,user_id,local_access_approved) VALUES(${bindingIssuer},${claim.sub}::uuid,${created.id},false)`,
+  );
+  return {user_id:created.id};
+}
 export function installPortalIdentity(app: Express) {
   app.get("/api/auth/onesa/native/config", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -53,18 +73,25 @@ export function installPortalIdentity(app: Express) {
       const token = JSON.stringify({access_token: tokens.access_token, id_token: tokens.id_token});
       const claim = await livePortalIdentity({...config, client}, token, input.data.nonce);
       const db = await portalDatabase();
-      const [link] = await db.execute(sql`SELECT user_id FROM onesa_factory_links
-        WHERE issuer=${config.managed.mappingIssuer} AND subject=${claim.sub}::uuid AND local_access_approved`);
-      if (!link) return res.sendStatus(403);
-      const [user] = await db.select().from(users).where(eq(users.id, Number(link.user_id)));
-      if (!user || user.disabledAt || user.passwordChangeRequired || sharedDemoIdentity(user) ||
-          (user.role === "admin" && (!claim.amr.includes("mfa") || Date.now()/1000 - claim.auth_time > 300)))
-        return res.sendStatus(403);
-      const sessionId = randomUUID();
-      const grant = sealGrant(JSON.stringify({token, role: claim.onesa_product_roles.factory, nativeClient: client}));
-      await db.execute(sql`INSERT INTO onesa_factory_sessions(session_id,user_id,encrypted_grant,expires_at)
-        VALUES(${sessionId}::uuid,${user.id},${grant},to_timestamp(${claim.exp}))`);
-      return res.json({session: await sdk.createSessionToken(user, {
+      const bindingIssuer=config.managed.mappingIssuer;
+      const result=await db.transaction(async tx=>{
+        await tx.execute(sql`SELECT pg_advisory_xact_lock(hashtextextended(${bindingIssuer+":"+claim.sub},0))`);
+        const [existing]=await tx.execute(sql`SELECT user_id,local_access_approved FROM onesa_factory_links
+          WHERE issuer=${bindingIssuer} AND subject=${claim.sub}::uuid`);
+        const link=existing ?? await createProductAccount(tx,bindingIssuer,claim);
+        if(!link)return null;
+        const [user]=await tx.select().from(users).where(eq(users.id,Number(link.user_id))).for("update");
+        if(!user || user.disabledAt || user.passwordChangeRequired || sharedDemoIdentity(user) ||
+           (user.role==="admin" && (!claim.amr.includes("mfa") || Date.now()/1000-claim.auth_time>300)))return null;
+        const sessionId=randomUUID();
+        const grant=sealGrant(JSON.stringify({token,role:claim.onesa_product_roles.factory,nativeClient:client}));
+        await tx.execute(sql`INSERT INTO onesa_factory_sessions(session_id,user_id,encrypted_grant,expires_at)
+          VALUES(${sessionId}::uuid,${user.id},${grant},to_timestamp(${claim.exp}))`);
+        return {user,sessionId,pending:existing?.local_access_approved!==true};
+      });
+      if(!result)return res.sendStatus(403);
+      const {user,sessionId,pending}=result;
+      return res.json({pending,identityRole:claim.onesa_product_roles.factory,session: await sdk.createSessionToken(user, {
         sessionId, expiresInMs: claim.exp*1000 - Date.now(), onesa: true,
       })});
     } catch (error) {
@@ -74,6 +101,7 @@ export function installPortalIdentity(app: Express) {
   app.get("/api/auth/onesa/account/:page", (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const page = req.params.page;
+    const audience=req.query.audience==="admin"?"admin":"user";
     if (!["login", "register", "security"].includes(page))
       return res.sendStatus(404);
     try {
@@ -84,10 +112,10 @@ export function installPortalIdentity(app: Express) {
         return res.redirect(
           303,
           config.managed.accountOrigin +
-            (page === "register" ? "/register?audience=user&product=factory&platform=web" : "/account"),
+            (page === "register" ? "/register?audience="+audience+"&product=factory&platform=web" : "/account"),
         );
       if (page === "register")
-        return res.redirect(303, "https://auth.onesa.eu/register?audience=user&product=factory&platform=web");
+        return res.redirect(303, "https://auth.onesa.eu/register?audience="+audience+"&product=factory&platform=web");
       const legacy =
         config?.issuer.replace(/\/api\/v1\/identity$/, "") ||
         "https://portal.onesa.eu";
@@ -331,23 +359,9 @@ export function installPortalIdentity(app: Express) {
             throw new InactivePortalIdentity();
         }
         if (!link) {
-          const [created] = await tx
-            .insert(users)
-            .values({
-              openId: "onesa-" + digest(bindingIssuer + ":" + claim.sub),
-              name: claim.name,
-              email: claim.email.toLowerCase(),
-              password: null,
-              loginMethod: "onesa",
-              role: "viewer",
-            })
-            .onConflictDoNothing()
-            .returning();
-          if (!created) return null;
-          await tx.execute(
-            sql`INSERT INTO onesa_factory_links(issuer,subject,user_id,local_access_approved) VALUES(${bindingIssuer},${claim.sub}::uuid,${created.id},false)`,
-          );
-          link = { user_id: created.id };
+          const created=await createProductAccount(tx,bindingIssuer,claim);
+          if(!created)return null;
+          link=created;
         }
         const [user] = await tx
           .select()

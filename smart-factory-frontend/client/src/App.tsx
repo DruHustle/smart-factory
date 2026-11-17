@@ -164,6 +164,7 @@ function AppRouter() {
             its records are available. Share your account email with your
             administrator.
           </p>
+          {user.access.identityRole==="admin" && <p>Your Onesa administrator account is active.</p>}
           <p>{user.email}</p>
           <button className="underline" onClick={() => void logout()}>
             Sign out

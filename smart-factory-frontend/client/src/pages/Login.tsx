@@ -351,6 +351,8 @@ export default function Login() {
             )}
           </Button>
 
+          {hostedWorkspace && <a href={portalRegistration+"?audience=admin"} onClick={rememberRegistration}>Request administrator access</a>}
+
           {/* Demo Accounts Section */}
           {demoAccountsQuery.isLoading && demoAccounts.length === 0 && (
             <p

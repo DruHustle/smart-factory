@@ -345,6 +345,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       },
     );
     it("reuses verified Factory ownership, checks signed resource and nonce, and reads locally during a managed Identity outage", async () => {
+      await (await portalDatabase()).execute(sql`DELETE FROM login_rate_limits`); // Isolate this synthetic IP from earlier test cases.
       const managedIssuer = "https://auth.onesa.test/";
       const audience = "https://api.factory.onesa.eu";
       const client = "factory-test-client";
@@ -354,7 +355,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         kid: "factory-test",
         alg: "RS256",
       };
-      const stableId = randomUUID();
+      let stableId = randomUUID();
       const local = await createUser({
         openId: randomUUID(),
         name: "Commissioning engineer",
@@ -480,6 +481,21 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       expect(nativeUser.id).toBe(local.id);
       const nativeCaller=appRouter.createCaller({user:nativeUser,req:bearer,res:{} as any});
       await expect(nativeCaller.alerts.actionQueue({page:0,pageSize:10})).resolves.toHaveProperty("items");
+      const existingId=stableId;
+      for(const tier of ["user","admin"]){
+        stableId=randomUUID(); managedRole=tier;
+        const first=await nativeExchange();
+        expect(first.status).toBe(200);
+        const entry=await first.json();
+        expect(entry).toMatchObject({pending:true,identityRole:tier});
+        const req={headers:{authorization:"Bearer "+entry.session}} as express.Request;
+        const signed=await sdk.authenticateRequestWithSession(req);
+        const pendingCaller=appRouter.createCaller({user:signed.user,session:signed.session,req,res:{} as any});
+        expect((await pendingCaller.auth.me())?.access).toMatchObject({identityRole:tier,provisioningRequired:true,canOperate:false,canAdminister:false});
+        await expect(pendingCaller.assets.list()).rejects.toThrow();
+      }
+      stableId=existingId;managedRole="admin";
+      expect((await request("/api/auth/onesa/account/register?audience=admin")).headers.get("location")).toBe("https://identity.onesa.test/register?audience=admin&product=factory&platform=web");
       outage = true;
       const { user, session } = await authenticate(cookie);
       expect(user.id).toBe(local.id);
