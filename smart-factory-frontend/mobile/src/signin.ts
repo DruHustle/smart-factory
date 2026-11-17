@@ -99,21 +99,21 @@ export async function finish(url: string) {
         ? "Ask your administrator for access to this workspace."
         : "Sign-in could not be completed. Start again.",
     );
-  const { session } = await response.json();
+  const { session, pending:accessPending, identityRole } = await response.json();
   if (typeof session !== "string" || !session)
     throw Error("Your sign-in did not return a session.");
-  return { session, destination: pending.destination };
+  return { session, destination: pending.destination, accessPending:accessPending===true, administrator:identityRole==="admin" };
 }
 
 const registrationKey = "operator.registration.pending";
 export const registrationReturn = "eu.onesa.factory://signin/registered";
 
-export async function register(destination: string | null) {
+export async function register(destination: string | null,audience:"user"|"admin") {
   if (Platform.OS !== "ios" && Platform.OS !== "android") throw Error("Unsupported registration platform.");
   await SecureStore.setItemAsync(registrationKey, JSON.stringify({destination}), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
-  const url = "https://auth.onesa.eu/register?audience=user&product=factory&platform=" + Platform.OS;
+  const url = "https://auth.onesa.eu/register?audience="+audience+"&product=factory&platform=" + Platform.OS;
   const result = await openAuthSessionAsync(url, registrationReturn);
   if (result.type === "success" && result.url === registrationReturn) return result.url;
   await SecureStore.deleteItemAsync(registrationKey);
