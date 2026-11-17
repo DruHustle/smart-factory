@@ -84,7 +84,7 @@ export function installPortalIdentity(app: Express) {
         return res.redirect(
           303,
           config.managed.accountOrigin +
-            (page === "register" ? "/register" : "/account"),
+            (page === "register" ? "/register?audience=user" : "/account"),
         );
       const legacy =
         config?.issuer.replace(/\/api\/v1\/identity$/, "") ||
@@ -95,7 +95,7 @@ export function installPortalIdentity(app: Express) {
           (page === "security"
             ? "/account/security"
             : page === "register"
-              ? "/admin?entry=register"
+              ? "/access/register?audience=user"
               : "/admin"),
       );
     } catch {

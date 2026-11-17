@@ -379,6 +379,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         wrongNonce = false,
         outage = false,
         wrongAudience = false;
+      let managedRole = "user";
+      let factor: number | undefined;
       const providerSubject = "auth0|test-owner";
       const ns = "https://onesa.eu/claims/";
       const token = (payload: Record<string, unknown>, target: string) =>
@@ -410,7 +412,8 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
             access_token: await token(
               {
                 [ns + "user_id"]: stableId,
-                [ns + "roles"]: ["user"],
+                [ns + "roles"]: [managedRole],
+                [ns + "mfa_time"]: factor,
                 [ns + "products"]: ["factory"],
               },
               wrongAudience ? "https://api.other.test" : audience,
@@ -450,6 +453,12 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
       wrongAudience = true;
       expect((await run()).headers.get("location")).toContain("onesa=denied");
       wrongAudience = false;
+      expect((await run()).headers.get("location")).toBe(origin + "/#/monitoring?asset=17");
+      managedRole = "admin";
+      expect((await run()).headers.get("location")).toContain("onesa=denied");
+      factor = Math.floor(Date.now() / 1000) - 301;
+      expect((await run()).headers.get("location")).toContain("onesa=denied");
+      factor = Math.floor(Date.now() / 1000);
       const result = await run();
       expect(result.headers.get("location")).toBe(
         origin + "/#/monitoring?asset=17",
@@ -490,7 +499,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         (await request("/api/auth/onesa/account/register")).headers.get(
           "location",
         ),
-      ).toBe("https://identity.onesa.test/register");
+      ).toBe("https://identity.onesa.test/register?audience=user");
     });
   },
 );
