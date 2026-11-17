@@ -79,3 +79,22 @@ test("a direct hosted registration link opens central Onesa registration", async
   await expect(page.getByRole("heading", {name: "Create an Onesa account"})).toBeVisible();
   await expect(page).toHaveURL(new URL("/api/auth/onesa/account/register", entry.origin).href);
 });
+
+test("Identity registration returns to Factory before resuming the bookmarked asset", async ({page,baseURL})=>{
+  await fixture(page);
+  const hosted = new URL("/#/monitoring?asset=17",baseURL);
+  hosted.hostname = "factory.localhost";
+  const registration = "https://auth.onesa.eu/register?audience=user&product=factory&platform=web";
+  await page.route("**/api/auth/onesa/account/register",route=>route.fulfill({status:302,headers:{Location:registration}}));
+  await page.route("https://auth.onesa.eu/**",route=>route.fulfill({contentType:"text/html",body:'<a href="'+hosted.origin+'/#/login?registration=complete">Back to Factory</a>'}));
+  await page.route("**/api/auth/onesa/start",route=>{
+    expect(route.request().postDataJSON()).toEqual({returnTo:"#/monitoring?asset=17"});
+    return route.fulfill({json:{url:"https://identity.example.test/authorize"}});
+  });
+  await page.route("https://identity.example.test/authorize",route=>route.fulfill({body:"Onesa sign-in"}));
+  await page.goto(hosted.href);
+  await page.getByRole("link",{name:"Create an Onesa account",exact:true}).click();
+  await expect(page).toHaveURL(registration);
+  await page.getByRole("link",{name:"Back to Factory"}).click();
+  await expect(page).toHaveURL("https://identity.example.test/authorize");
+});

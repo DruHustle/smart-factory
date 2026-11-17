@@ -84,19 +84,17 @@ export function installPortalIdentity(app: Express) {
         return res.redirect(
           303,
           config.managed.accountOrigin +
-            (page === "register" ? "/register?audience=user" : "/account"),
+            (page === "register" ? "/register?audience=user&product=factory&platform=web" : "/account"),
         );
+      if (page === "register")
+        return res.redirect(303, "https://auth.onesa.eu/register?audience=user&product=factory&platform=web");
       const legacy =
         config?.issuer.replace(/\/api\/v1\/identity$/, "") ||
         "https://portal.onesa.eu";
       return res.redirect(
         303,
         legacy +
-          (page === "security"
-            ? "/account/security"
-            : page === "register"
-              ? "/access/register?audience=user"
-              : "/admin"),
+          (page === "security" ? "/account/security" : "/admin"),
       );
     } catch {
       return res.sendStatus(503);
