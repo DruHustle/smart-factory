@@ -85,7 +85,7 @@ test("Identity registration returns to Factory before resuming the bookmarked as
   const hosted = new URL("/#/monitoring?asset=17",baseURL);
   hosted.hostname = "factory.localhost";
   const registration = "https://auth.onesa.eu/register?audience=user&product=factory&platform=web";
-  await page.route("**/api/auth/onesa/account/register",route=>route.fulfill({status:302,headers:{Location:registration}}));
+  await page.route("**/api/auth/onesa/account/register",route=>route.fulfill({contentType:"text/html",body:"<script>location.replace("+JSON.stringify(registration)+")</script>"} ));
   await page.route("https://auth.onesa.eu/**",route=>route.fulfill({contentType:"text/html",body:'<a href="'+hosted.origin+'/#/login?registration=complete">Back to Factory</a>'}));
   await page.route("**/api/auth/onesa/start",route=>{
     expect(route.request().postDataJSON()).toEqual({returnTo:"#/monitoring?asset=17"});
