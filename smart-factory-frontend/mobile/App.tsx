@@ -12,7 +12,7 @@ import {
   View,
 } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
-import { finish, start } from "./src/signin";
+import { finish, start, register, registeredDestination, registrationReturn } from "./src/signin";
 import { title, queue, redirect } from "./src/config";
 import {
   actionLabel,
@@ -31,6 +31,7 @@ import {
 import { OperatorRecords } from "./src/OperatorRecords";
 
 export default function App() {
+  const [pendingTier,setPendingTier]=useState<"user"|"admin"|null>(null);
   const [token, setToken] = useState<string | null>(null);
   const [destination, setDestination] = useState<string | null>(null);
   const [rows, setRows] = useState<Item[]>([]);
@@ -50,12 +51,25 @@ export default function App() {
     }
     safeError(e);
   }
+  const resumingRegistration = useRef(false);
   async function receive(url: string) {
     try {
-      if (url.startsWith(redirect + "?")) {
+      if (url === registrationReturn) {
+        if (resumingRegistration.current) return;
+        resumingRegistration.current = true;
+        try {
+          const requested = await registeredDestination();
+          if (requested === undefined) return;
+          const target = requested && validKey(requested) ? requested : null;
+          setDestination(target);
+          const callback = await start(target);
+          if (callback) await receive(callback);
+        } finally { resumingRegistration.current = false; }
+      } else if (url.startsWith(redirect + "?")) {
         const result = await finish(url);
         if (result) {
           setDestination(result.destination);
+          setPendingTier(result.accessPending ? result.administrator ? "admin" : "user" : null);
           setToken(result.session);
           setInfo("");
         }
@@ -89,7 +103,7 @@ export default function App() {
     return () => sub.remove();
   }, []);
   useEffect(() => {
-    if (!token) return;
+    if (!token || pendingTier) return;
     let active = true;
     setBusy(true);
     setInfo("");
@@ -114,7 +128,7 @@ export default function App() {
     return () => {
       active = false;
     };
-  }, [token, destination, refresh]);
+  }, [token, destination, refresh,pendingTier]);
   async function login() {
     if (submitting.current) return;
     submitting.current = true;
@@ -189,6 +203,25 @@ export default function App() {
                 onPress={login}
                 disabled={busy}
               />
+              {(["user","admin"] as const).map(audience=><Button key={audience}
+                title={audience==="admin"?"Request administrator access":"Create an Onesa account"}
+                disabled={busy}
+                onPress={async () => {
+                  if (submitting.current) return;
+                  submitting.current = true; setBusy(true);
+                  try {
+                    const url = await register(destination,audience);
+                    if (url) await receive(url);
+                  } catch (e) { fail(e); }
+                  finally { submitting.current = false; setBusy(false); }
+                }}
+              />)}
+            </View>
+          ) : pendingTier ? (
+            <View style={styles.section}>
+              <Text>{pendingTier==="admin"?"Your Onesa administrator account is signed in.":"Your Onesa account is signed in."}</Text>
+              <Text>A Factory administrator must approve access to this factory before its records are available.</Text>
+              <Button title="Sign out" onPress={logout}/>
             </View>
           ) : (
             <View style={styles.section}>

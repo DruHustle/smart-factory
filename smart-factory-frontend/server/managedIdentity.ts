@@ -76,6 +76,9 @@ export async function verifyManagedGrant(
   const products = access[ns + "products"];
   const now = Math.floor(Date.now() / 1000);
   const factor = access[ns + "mfa_time"];
+  const mfaTime = typeof factor === "number" && Number.isSafeInteger(factor) &&
+    factor > 0 && factor <= now ? factor : 0;
+  const role = Array.isArray(roles) && roles.length === 1 ? roles[0] : undefined;
   if (
     id.sub !== access.sub ||
     (nonce !== undefined && (!nonce || id.nonce !== nonce)) ||
@@ -89,9 +92,7 @@ export async function verifyManagedGrant(
     !Array.isArray(products) ||
     products.length !== 1 ||
     products[0] !== "factory" ||
-    !Array.isArray(roles) ||
-    roles.length !== 1 ||
-    roles[0] !== "user" ||
+    (role !== "user" && (role !== "admin" || !mfaTime || now - mfaTime >= 300)) ||
     !Number.isSafeInteger(access.iat) ||
     !Number.isSafeInteger(access.exp) ||
     access.iat! > now ||
@@ -108,22 +109,10 @@ export async function verifyManagedGrant(
     email: profile.email,
     email_verified: true as const,
     name: profile.name || profile.email,
-    auth_time:
-      typeof factor === "number" &&
-      Number.isSafeInteger(factor) &&
-      factor > 0 &&
-      factor <= now
-        ? factor
-        : 0,
-    amr:
-      typeof factor === "number" &&
-      Number.isSafeInteger(factor) &&
-      factor > 0 &&
-      factor <= now
-        ? ["mfa"]
-        : [],
+    auth_time: mfaTime,
+    amr: mfaTime ? ["mfa"] : [],
     onesa_roles: [] as string[],
     onesa_applications: ["factory"],
-    onesa_product_roles: { factory: "user" as "user" | "admin" },
+    onesa_product_roles: { factory: role as "user" | "admin" },
   };
 }

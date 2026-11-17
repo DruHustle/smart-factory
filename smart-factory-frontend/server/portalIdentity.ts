@@ -11,7 +11,7 @@ import { z } from "zod";
 import { getDb } from "./db";
 import type { User } from "../drizzle/schema";
 
-export type PortalUser = User & { onesaAccessPending?: boolean };
+export type PortalUser = User & { onesaAccessPending?: boolean; onesaIdentityRole?:"user"|"admin" };
 export const randomValue = () => randomBytes(32).toString("base64url");
 export const digest = (value: string) =>
   createHash("sha256").update(value).digest("base64url");
@@ -236,6 +236,7 @@ export async function verifyPortalSession(
   return {
     ...user,
     role: admin ? "admin" : user.role,
+    onesaIdentityRole: claim.onesa_product_roles.factory,
     onesaAccessPending: !admin && row.local_access_approved !== true,
   };
 }

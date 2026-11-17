@@ -304,6 +304,7 @@ function publicUser(
     ...safeUser,
     access: {
       ...base,
+      identityRole:(user as db.User & {onesaIdentityRole?:"user"|"admin"}).onesaIdentityRole,
       ...((user as db.User & { onesaAccessPending?: boolean }).onesaAccessPending
         ? { provisioningRequired: true }
         : {}),

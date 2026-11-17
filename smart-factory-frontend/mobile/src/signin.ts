@@ -1,3 +1,4 @@
+import { Platform } from "react-native";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { openAuthSessionAsync } from "expo-web-browser";
@@ -98,8 +99,31 @@ export async function finish(url: string) {
         ? "Ask your administrator for access to this workspace."
         : "Sign-in could not be completed. Start again.",
     );
-  const { session } = await response.json();
+  const { session, pending:accessPending, identityRole } = await response.json();
   if (typeof session !== "string" || !session)
     throw Error("Your sign-in did not return a session.");
-  return { session, destination: pending.destination };
+  return { session, destination: pending.destination, accessPending:accessPending===true, administrator:identityRole==="admin" };
+}
+
+const registrationKey = "operator.registration.pending";
+export const registrationReturn = "eu.onesa.factory://signin/registered";
+
+export async function register(destination: string | null,audience:"user"|"admin") {
+  if (Platform.OS !== "ios" && Platform.OS !== "android") throw Error("Unsupported registration platform.");
+  await SecureStore.setItemAsync(registrationKey, JSON.stringify({destination}), {
+    keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+  });
+  const url = "https://auth.onesa.eu/register?audience="+audience+"&product=factory&platform=" + Platform.OS;
+  const result = await openAuthSessionAsync(url, registrationReturn);
+  if (result.type === "success" && result.url === registrationReturn) return result.url;
+  await SecureStore.deleteItemAsync(registrationKey);
+  return null;
+}
+
+export async function registeredDestination(): Promise<string | null | undefined> {
+  const stored = await SecureStore.getItemAsync(registrationKey);
+  if (!stored) return undefined;
+  await SecureStore.deleteItemAsync(registrationKey);
+  const {destination} = JSON.parse(stored);
+  return typeof destination === "string" ? destination : null;
 }
