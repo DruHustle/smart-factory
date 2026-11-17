@@ -499,7 +499,7 @@ describe.skipIf(!process.env.TEST_DATABASE_URL)(
         (await request("/api/auth/onesa/account/register")).headers.get(
           "location",
         ),
-      ).toBe("https://identity.onesa.test/register?audience=user");
+      ).toBe("https://identity.onesa.test/register?audience=user&product=factory&platform=web");
     });
   },
 );

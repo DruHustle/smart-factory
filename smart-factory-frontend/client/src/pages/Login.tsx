@@ -5,7 +5,7 @@
  * Uses tRPC authentication with demo account buttons.
  */
 
-import { hostedWorkspace, portalRegistration, portalSignIn } from "@/lib/portal-account";
+import { hostedWorkspace, portalRegistration, portalSignIn, rememberRegistration, resumeRegistration } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -85,6 +85,10 @@ export default function Login() {
       active = false;
     };
   }, []);
+  useEffect(() => {
+    if (onesaEnabled && resumeRegistration()) void signInWithOnesa();
+  }, [onesaEnabled]);
+
   async function signInWithOnesa(link = false) {
     setError("");
     setIsLoading(true);
@@ -341,7 +345,7 @@ export default function Login() {
 
           <Button asChild variant="outline" className="w-full">
             {hostedWorkspace ? (
-              <a href={portalRegistration}>Create an Onesa account</a>
+              <a href={portalRegistration} onClick={rememberRegistration}>Create an Onesa account</a>
             ) : (
               <Link href="/register">Register</Link>
             )}
