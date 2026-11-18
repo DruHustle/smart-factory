@@ -133,6 +133,7 @@ jobs:
     - name: Audit dependencies and verify exact installed mitigation
       run: |
         pnpm test:dependency-security
+        node --test scripts/audit-patched-picomatch.test.mjs
         node scripts/audit-patched-picomatch.mjs
   isolated-browser:
     name: Isolated browser (${{ matrix.suite }})
