@@ -115,7 +115,7 @@ export function installPortalIdentity(app: Express) {
             (page === "register" ? "/register?audience="+audience+"&product=factory&platform=web" : "/account"),
         );
       if (page === "register")
-        return res.redirect(303, "https://auth.onesa.eu/register?audience="+audience+"&product=factory&platform=web");
+        return res.redirect(303, "https://account.onesa.eu/register?audience="+audience+"&product=factory&platform=web");
       const legacy =
         config?.issuer.replace(/\/api\/v1\/identity$/, "") ||
         "https://portal.onesa.eu";
