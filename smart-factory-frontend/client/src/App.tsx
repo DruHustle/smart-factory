@@ -1,4 +1,4 @@
-import { hostedWorkspace, portalRegistration, portalSecurity, rememberRegistration } from "./lib/portal-account";
+import { hostedWorkspace, identityRecovery } from "./lib/portal-account";
 import { lazy, Suspense, useEffect } from "react";
 import { Analytics } from "@vercel/analytics/react";
 import { Toaster } from "@/components/ui/sonner";
@@ -92,29 +92,30 @@ function LegacyItem({
   );
 }
 
-function PortalAccountRedirect({ register }: { register: boolean }) {
-  const url = register ? portalRegistration : portalSecurity;
-  useEffect(() => {
-    if (register) rememberRegistration();
-    window.location.replace(url);
-  }, [url, register]);
-  return <a href={url}>Continue to your Onesa account</a>;
+function ManagedRecoveryRedirect() {
+  // Never forward legacy reset tokens to the central issuer or repeat a
+  // product-owned credential flow on hosted Factory.
+  useEffect(() => { window.location.replace(identityRecovery); }, []);
+  return <a href={identityRecovery}>Open Onesa sign-in to recover your account</a>;
 }
 
 function AppRouter() {
   const { user, isLoading, logout } = useAuth();
   const [location] = useHashLocation();
   const path = location.split("?")[0];
-  if (
-    hostedWorkspace &&
-    [
-      "/register",
-      "/forgot-password",
-      "/reset-password",
-      "/account/password",
-    ].includes(path)
-  )
-    return <PortalAccountRedirect register={path === "/register"} />;
+  // Hosted registration must render both user and administrator choices.
+  // The product's legacy account redirect intercepted these screens before
+  // they could render, sending customers to obsolete Portal credentials.
+  if (hostedWorkspace && ["/register", "/forgot-password"].includes(path))
+    return (
+      <WouterRouter hook={useHashPath}>
+        <Suspense fallback={<RouteLoading />}>
+          {path === "/register" ? <Register /> : <ForgotPassword />}
+        </Suspense>
+      </WouterRouter>
+    );
+  if (hostedWorkspace && ["/reset-password", "/account/password"].includes(path))
+    return <ManagedRecoveryRedirect />;
 
   // A recovery link authorizes only the password change. It must also work
   // while another account or a temporary-credential session is signed in.
