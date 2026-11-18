@@ -345,7 +345,7 @@ export default function Login() {
 
           <Button asChild variant="outline" className="w-full">
             {hostedWorkspace ? (
-              <a href={hostedWorkspace ? identityRegistration("user") : portalRegistration} onClick={rememberRegistration}>Create an Onesa account</a>
+              <a href={identityRegistration("user")} onClick={rememberRegistration}>Create an Onesa account</a>
             ) : (
               <Link href="/register">Register</Link>
             )}
