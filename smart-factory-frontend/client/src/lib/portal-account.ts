@@ -8,6 +8,13 @@ export const hostedWorkspace = !["localhost", "127.0.0.1", "[::1]"].includes(
 export const portalSignIn = api + "/auth/onesa/account/login";
 export const portalRegistration = api + "/auth/onesa/account/register";
 export const portalSecurity = api + "/auth/onesa/account/security";
+// Onesa Account owns credentials for all hosted product registrations.
+export function identityRegistration(audience: "user" | "admin") {
+  return "https://account.onesa.eu/register?audience=" + audience + "&product=factory&platform=web";
+}
+// Account recovery starts at the central managed sign-in screen.
+// /account/recovery is an authenticated POST, not a public GET page.
+export const identityRecovery = "https://account.onesa.eu/login";
 
 const registrationKey = "onesa.product-registration";
 

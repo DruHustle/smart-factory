@@ -5,7 +5,7 @@
  * Uses tRPC authentication with demo account buttons.
  */
 
-import { hostedWorkspace, portalRegistration, portalSignIn, rememberRegistration, resumeRegistration } from "@/lib/portal-account";
+import { hostedWorkspace, identityRegistration, rememberRegistration, resumeRegistration } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -226,13 +226,16 @@ export default function Login() {
           )}
           {/* Login Form */}
           {hostedWorkspace && onesaEnabled === false && (
-            <p role="status">
-              The shared sign-in service is not connected. You can retry or{" "}
-              <a href={portalSignIn} className="text-primary underline">
-                open your Onesa account
-              </a>
-              .
-            </p>
+            <div role="status" className="space-y-2 text-sm">
+              <p>Onesa Identity sign-in is currently unavailable. Factory access
+              remains locked until your account can be verified.</p>
+              <Button type="button" variant="outline" disabled={isLoading}
+                onClick={() => {
+                  setOnesaEnabled(null);
+                  void onesaAvailable().then(setOnesaEnabled)
+                    .catch(() => setOnesaEnabled(false));
+                }}>Retry Onesa sign-in</Button>
+            </div>
           )}
           {hostedWorkspace && error && <p role="alert">{error}</p>}
           {(!hostedWorkspace ||
@@ -345,13 +348,13 @@ export default function Login() {
 
           <Button asChild variant="outline" className="w-full">
             {hostedWorkspace ? (
-              <a href={portalRegistration} onClick={rememberRegistration}>Create an Onesa account</a>
+              <a href={identityRegistration("user")} onClick={rememberRegistration}>Create an Onesa account</a>
             ) : (
               <Link href="/register">Register</Link>
             )}
           </Button>
 
-          {hostedWorkspace && <a href={portalRegistration+"?audience=admin"} onClick={rememberRegistration}>Request administrator access</a>}
+          {hostedWorkspace && <a href={identityRegistration("admin")} onClick={rememberRegistration}>Request administrator access</a>}
 
           {/* Demo Accounts Section */}
           {demoAccountsQuery.isLoading && demoAccounts.length === 0 && (
