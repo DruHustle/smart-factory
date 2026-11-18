@@ -19,6 +19,7 @@ import { Link, useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { userFacingApiError } from "@/lib/errors";
 import { FirstAdministratorHelp } from "@/components/FirstAdministratorHelp";
+import { hostedWorkspace, identityRegistration, rememberRegistration } from "@/lib/portal-account";
 
 const REQUESTED_ROLES = [
   "Administrator",
@@ -108,6 +109,29 @@ export default function Register() {
       setIsLoading(false);
     }
   };
+
+  if (hostedWorkspace) return (
+    <RegistrationShell>
+      <Card className="relative z-10 w-full max-w-md">
+        <CardHeader>
+          <h1 className="text-2xl font-bold">Create your Onesa account</h1>
+          <CardDescription>
+            Your Onesa account works across products. Factory access is granted separately
+            after your administrator approves the required role.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button asChild className="w-full">
+            <a href={identityRegistration("user")} onClick={rememberRegistration}>Register as a user</a>
+          </Button>
+          <Button asChild variant="outline" className="w-full">
+            <a href={identityRegistration("admin")} onClick={rememberRegistration}>Request administrator access</a>
+          </Button>
+          <Button asChild variant="ghost" className="w-full"><Link href="/login">Back to sign in</Link></Button>
+        </CardContent>
+      </Card>
+    </RegistrationShell>
+  );
 
   if (!requestedRole)
     return (
