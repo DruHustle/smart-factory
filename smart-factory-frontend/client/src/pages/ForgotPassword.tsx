@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { hostedWorkspace, identityRecovery } from "@/lib/portal-account";
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState("");
@@ -23,6 +24,23 @@ export default function ForgotPassword() {
   });
   const emailDelivery = policy.data?.delivery === "email";
   const request = trpc.auth.requestPasswordReset.useMutation();
+  if (hostedWorkspace) return (
+    <main className="flex min-h-screen items-center justify-center bg-background p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader>
+          <h1 className="text-2xl font-bold">Recover your Onesa account</h1>
+          <CardDescription>
+            Factory uses your shared Onesa account. Open Onesa sign-in, then
+            choose Forgot password to reset your password securely.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <Button asChild className="w-full"><a href={identityRecovery}>Open Onesa sign-in</a></Button>
+          <Button asChild variant="outline" className="w-full"><Link href="/login">Back to sign in</Link></Button>
+        </CardContent>
+      </Card>
+    </main>
+  );
   return (
     <main className="relative flex min-h-screen items-center justify-center bg-background p-4 sm:p-6">
       <Card className="w-full max-w-md">
