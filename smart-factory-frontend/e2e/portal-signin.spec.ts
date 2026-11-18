@@ -88,6 +88,21 @@ test("hosted registration presents both central enrollment tiers without local c
   await expect(page.getByRole("heading", {name: "Onesa Account registration"})).toBeVisible();
 });
 
+test("hosted password recovery routes only to Onesa sign-in and never forwards a reset token", async ({page,baseURL})=>{
+  await fixture(page);
+  const hosted = new URL("/#/forgot-password", baseURL);
+  hosted.hostname = "factory.localhost";
+  const account = "https://account.onesa.eu/login";
+  await page.route(account, route => route.fulfill({contentType:"text/html",body:"<h1>Onesa sign-in</h1>"}));
+  await page.goto(hosted.href);
+  await expect(page.getByRole("heading",{name:"Recover your Onesa account"})).toBeVisible();
+  const link = page.getByRole("link",{name:"Open Onesa sign-in"});
+  await expect(link).toHaveAttribute("href",account);
+  await page.goto(hosted.origin+"/#/reset-password?token=synthetic.private.value");
+  await expect(page).toHaveURL(account);
+  await expect(page.getByRole("heading",{name:"Onesa sign-in"})).toBeVisible();
+});
+
 test("Identity registration returns to Factory before resuming the bookmarked asset", async ({page,baseURL})=>{
   await fixture(page);
   const hosted = new URL("/#/monitoring?asset=17",baseURL);
