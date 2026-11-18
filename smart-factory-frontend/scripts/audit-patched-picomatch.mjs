@@ -2,7 +2,7 @@
 // local mitigation for GHSA-fc5q-39xc-vjpf. No general audit ignore is allowed.
 import assert from 'node:assert/strict';
 import {createHash} from 'node:crypto';
-import {readFileSync,realpathSync} from 'node:fs';
+import {readFileSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {dirname,join,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
@@ -31,7 +31,7 @@ function installedMitigation(){
   assert.equal(installedPkg.name,'picomatch');
   assert.equal(installedPkg.version,vendorPkg.version);
   const installedParse=join(dirname(requireFromVite.resolve('picomatch/package.json')),'lib/parse.js');
-  assert.equal(realpathSync(installedParse),realpathSync(parse),'Vite resolves an unreviewed parser');
+  assert.equal(gitBlob(readFileSync(installedParse)),sourceSha,'Vite resolves an unreviewed parser');
   const match=requireFromVite('picomatch');
   for(const pattern of ['+(*)','+(*a)','+(a*)','*(a*|b)','+(ab|abab)']){
     assert.equal(match.makeRe(pattern).test('a'.repeat(150)+'!'),false,pattern);
