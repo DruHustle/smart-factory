@@ -9,7 +9,7 @@
     "start": "NODE_ENV=production tsx server/_core/index.ts",
     "check": "tsc --noEmit",
     "format": "prettier --write .",
-    "test": "vitest run",
+    "test": "vitest run && pnpm test:dependency-security",
     "preview": "vite preview --host",
     "db:push": "DOTENV_CONFIG_PATH=.env.local drizzle-kit generate && DOTENV_CONFIG_PATH=.env.local drizzle-kit migrate",
     "db:migrate": "DOTENV_CONFIG_PATH=.env.local drizzle-kit migrate",
@@ -35,7 +35,8 @@
     "e2e:resources": "bash scripts/resources/e2e.sh",
     "e2e:onesa": "bash scripts/onesa/e2e.sh",
     "e2e:rendering": "node scripts/equipment/qualify-rendering.mjs",
-    "e2e:visual-workspaces": "PUBLIC_DEMO_PLAYWRIGHT_CONFIG=playwright.visual-workspaces.config.ts PUBLIC_DEMO_COMPOSE_PROJECT=smart-factory-visual-workspaces-e2e bash scripts/public-demo/e2e.sh"
+    "e2e:visual-workspaces": "PUBLIC_DEMO_PLAYWRIGHT_CONFIG=playwright.visual-workspaces.config.ts PUBLIC_DEMO_COMPOSE_PROJECT=smart-factory-visual-workspaces-e2e bash scripts/public-demo/e2e.sh",
+    "test:dependency-security": "node --test scripts/test-vendored-picomatch.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
@@ -146,7 +147,6 @@
       "rollup@>=4.0.0 <4.59.0": "4.64.0",
       "path-to-regexp@<0.1.13": "0.1.13",
       "picomatch@<2.3.2": "2.3.2",
-      "picomatch@>=4.0.0 <4.0.4": "4.0.7",
       "lodash-es@<4.18.1": "4.18.1",
       "lodash@<4.18.1": "4.18.1",
       "drizzle-orm@<0.45.2": "0.45.3",
@@ -166,7 +166,8 @@
       "katex@<0.18.2": "0.18.2",
       "dompurify@<3.4.17": "3.4.17",
       "body-parser@<1.20.9": "1.20.9",
-      "qs@<6.16.1": "6.16.1"
+      "qs@<6.16.1": "6.16.1",
+      "picomatch@>=4.0.0": "file:vendor/onesa-picomatch-redos-4.0.8-onesa.1"
     }
   }
 }
