@@ -5,7 +5,7 @@
  * Uses tRPC authentication with demo account buttons.
  */
 
-import { hostedWorkspace, identityRegistration, portalRegistration, portalSignIn, rememberRegistration, resumeRegistration } from "@/lib/portal-account";
+import { hostedWorkspace, identityRegistration, portalSignIn, rememberRegistration, resumeRegistration } from "@/lib/portal-account";
 import { Button } from "@/components/ui/button";
 import {
   Card,
