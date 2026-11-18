@@ -12,7 +12,9 @@ export const portalSecurity = api + "/auth/onesa/account/security";
 export function identityRegistration(audience: "user" | "admin") {
   return "https://account.onesa.eu/register?audience=" + audience + "&product=factory&platform=web";
 }
-export const identityRecovery = "https://account.onesa.eu/account/recovery";
+// Account recovery starts at the central managed sign-in screen.
+// /account/recovery is an authenticated POST, not a public GET page.
+export const identityRecovery = "https://account.onesa.eu/login";
 
 const registrationKey = "onesa.product-registration";
 
