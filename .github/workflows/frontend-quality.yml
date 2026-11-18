@@ -774,8 +774,8 @@ jobs:
       run: pnpm exec vitest run server/equipment/openusd.test.ts
     - name: Prepare signed Ubuntu mirror failover on disposable runner
       run: |
-        python3 -m unittest discover -s scripts/ci -p test_browser_dependencies.py
-        sudo -n --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_OS,GITHUB_REPOSITORY python3 scripts/ci/browser_dependencies.py
+        python3 -m unittest discover -s "$GITHUB_WORKSPACE/scripts/ci" -p test_browser_dependencies.py
+        sudo -n --preserve-env=GITHUB_ACTIONS,RUNNER_ENVIRONMENT,RUNNER_OS,GITHUB_REPOSITORY python3 "$GITHUB_WORKSPACE/scripts/ci/browser_dependencies.py"
     - name: Install three browser engines
       run: pnpm exec playwright install --with-deps chromium firefox webkit
     - name: Verify actual models, mobile layout and safe failures
