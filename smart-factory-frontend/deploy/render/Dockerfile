@@ -8,6 +8,9 @@ ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
+# File-backed picomatch mitigation is resolved at pnpm install time.
+# Include its reviewed source before frozen installs in both build stages.
+COPY vendor/onesa-picomatch-redos-4.0.8-onesa.1 ./vendor/onesa-picomatch-redos-4.0.8-onesa.1
 RUN pnpm install --frozen-lockfile
 COPY tsconfig.json ./
 COPY server ./server
@@ -29,6 +32,9 @@ ENV PNPM_HOME=/pnpm PATH=/pnpm:$PATH
 WORKDIR /app
 RUN corepack enable
 COPY package.json pnpm-lock.yaml ./
+# File-backed picomatch mitigation is resolved at pnpm install time.
+# Include its reviewed source before frozen installs in both build stages.
+COPY vendor/onesa-picomatch-redos-4.0.8-onesa.1 ./vendor/onesa-picomatch-redos-4.0.8-onesa.1
 COPY scripts/prepare-runtime.mjs ./scripts/
 RUN node scripts/prepare-runtime.mjs && pnpm install --prod --frozen-lockfile
 
@@ -53,6 +59,8 @@ COPY --from=node-dependencies /usr/local/bin/node /usr/local/bin/node
 RUN node -e 'for(const name of ["SOURCE_REVISION","BACKEND_SOURCE_REVISION","EDGE_SOURCE_REVISION"])if(!/^[a-f0-9]{40}$/.test(process.env[name]??""))throw Error("Invalid build source identity: "+name)'
 WORKDIR /app
 COPY --from=node-dependencies --chown=app:app /app/node_modules ./node_modules
+# Preserve local dependency payloads in case pnpm materializes directory links.
+COPY --from=node-dependencies --chown=app:app /app/vendor ./vendor
 COPY --from=node-dependencies --chown=app:app /app/package.json ./
 COPY --from=node-build --chown=app:app /compiled/ ./
 COPY --chown=app:app drizzle ./drizzle
