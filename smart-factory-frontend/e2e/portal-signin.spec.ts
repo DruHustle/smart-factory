@@ -48,7 +48,8 @@ test("hosted Factory delegates registration and recovery through the configured 
   const hosted = new URL("/#/monitoring", baseURL);
   hosted.hostname = "factory.localhost";
   await page.goto(hosted.href);
-  await expect(page.getByRole("link", { name: "open your Onesa account" })).toHaveAttribute("href", "/api/auth/onesa/account/login");
+  await expect(page.getByRole("button", { name: "Retry Onesa sign-in" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "open your Onesa account" })).toHaveCount(0);
   await page.getByRole("link", { name: "Create an Onesa account", exact: true }).click();
   await expect(page.getByRole("heading", {name:"Registration route reached"})).toBeVisible();
   await expect(page).toHaveURL(registration);
