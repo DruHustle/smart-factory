@@ -1,6 +1,6 @@
 # Onesa identity contract
 
-Hosted Smart Factory has a legacy Portal provider mode and an opt-in managed Identity mode. The following configuration describes the legacy provider. See **Managed Identity pilot** below for the managed client.
+Hosted Smart Factory supports the managed Auth0 identity route and a legacy Portal provider route for already-paired environments. For new hosted production integrations, use managed Auth0 as documented below; retain Portal mode only where an existing deployment explicitly requires it for compatibility or a rehearsed rollback.
 **Continue with Onesa** starts authorization for the requested Factory screen.
 A Portal link may use `/login?returnTo=` with a URL-encoded Factory hash bookmark.
 **Create an Onesa account** and direct `/register` links open the configured
@@ -15,10 +15,9 @@ local account with both conditions off. The explicitly selected demo identities
 exercise the demo experience. An existing Factory user may be asked for one-time
 password proof to link their retained account during the Portal flow.
 
-Before connecting the hosted product, register a confidential client for
-product `factory` with Company Portal and apply all dashboard migrations through
-`0040_onesa_identity.sql`. The schema source lives in `drizzle/`. Keep local migration
-execution records in `local-tools/migrations` at the repository root.
+Apply all dashboard migrations through `0040_onesa_identity.sql` before connecting the hosted product. The schema source lives in `drizzle/`; keep local migration execution records in `local-tools/migrations` at the repository root.
+
+For an existing Portal-mode deployment only, register the confidential Factory client with Company Portal and retain its exact callback and allowlist. The Portal-specific variables below describe that compatibility route; keep `ONESA_IDENTITY_AUDIENCE` unset when using it.
 
 Configure `ONESA_IDENTITY_ENABLED=true`, `ONESA_IDENTITY_ISSUER` (exact HTTPS
 Portal origin plus `/api/v1/identity`), `ONESA_IDENTITY_CLIENT_ID` (16–128 URL-safe
@@ -78,9 +77,9 @@ deployment must be recorded separately against the same final revisions. Hardwar
 telemetry qualification remains an independent requirement.
 
 
-## Managed Identity pilot
+## Managed Auth0 identity
 
-Set `ONESA_IDENTITY_ENABLED=true` with the issuer `https://auth.onesa.eu/`, the registered confidential client ID and secret, exact `/api/auth/onesa/callback` URI and existing public dashboard origin. Set `ONESA_IDENTITY_AUDIENCE` to the Factory API identifier (proposed `https://api.factory.onesa.eu`), `ONESA_IDENTITY_ACCOUNT_ORIGIN` to the central Identity UI and `ONESA_IDENTITY_PUBLIC_JWKS` to the managed issuer’s trusted public current/next RS256 signing keys. Stage replacement keys before enabling their use. The callback uses code + S256 and verifies the signed ID token nonce and the signed access token. Only the Factory grant and `user` role authorize entry. Factory retains its own role and equipment permissions. An approved local admin additionally needs an MFA timestamp within 300 seconds.
+Use `ONESA_IDENTITY_ENABLED=true` with the managed Auth0 issuer `https://auth.onesa.eu/`, the registered confidential client ID and secret, exact `/api/auth/onesa/callback` URI and existing public dashboard origin. Set `ONESA_IDENTITY_AUDIENCE` to the Factory API identifier (proposed `https://api.factory.onesa.eu`), `ONESA_IDENTITY_ACCOUNT_ORIGIN` to the central Identity UI and `ONESA_IDENTITY_PUBLIC_JWKS` to the managed issuer’s trusted public current/next RS256 signing keys. Stage replacement keys before enabling their use. The callback uses code + S256 and verifies the signed ID token nonce and the signed access token. Only the Factory grant and `user` role authorize entry. Factory retains its own role and equipment permissions. An approved local admin additionally needs an MFA timestamp within 300 seconds.
 
 Configure `ONESA_IDENTITY_MAPPING_ISSUER` to the exact old Portal issuer already used by verified Factory links in this environment. The managed issuer’s signed stable Onesa UUID maps to that existing identity. For unlinked accounts the existing dual-authentication flow proves local ownership. Existing subject links, operator recovery access, equipment identity and control-plane credentials remain owned by Factory.
 
