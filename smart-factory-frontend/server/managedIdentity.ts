@@ -78,7 +78,10 @@ export async function verifyManagedGrant(
   const factor = access[ns + "mfa_time"];
   const mfaTime = typeof factor === "number" && Number.isSafeInteger(factor) &&
     factor > 0 && factor <= now ? factor : 0;
-  const role = Array.isArray(roles) && roles.length === 1 ? roles[0] : undefined;
+  const receivedRole = Array.isArray(roles) && roles.length === 1 ? roles[0] : undefined;
+  // Identity now emits the canonical product role. Keep the local Factory ACL
+  // vocabulary stable while accepting the transitional prior claim value.
+  const role = receivedRole === "administrator" ? "admin" : receivedRole;
   if (
     id.sub !== access.sub ||
     (nonce !== undefined && (!nonce || id.nonce !== nonce)) ||
