@@ -55,6 +55,7 @@ export default function Administration() {
         title="Administration"
         description="Connections, access and recorded workspace activity."
       />
+      {user.access.canAdminister && <p><a href="https://account.onesa.eu/admin?product=factory">Manage Onesa administrators</a></p>}
       <SectionNav
         label="Administration sections"
         sections={sections}
