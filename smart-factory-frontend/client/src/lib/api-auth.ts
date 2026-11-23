@@ -21,6 +21,7 @@ export interface AuthResponse {
   success: boolean;
   user?: PublicUser;
   error?: string;
+  browserLogoutUrl?: string;
 }
 
 // Keep the browser session cookie on the same host as the dashboard by default.
@@ -126,7 +127,11 @@ export async function getCurrentUser(): Promise<AuthResponse> {
 
 export async function logout(): Promise<AuthResponse> {
   try {
-    await trpcAuthClient.auth.logout.mutate();
+    const result = await trpcAuthClient.auth.logout.mutate();
+    const destination = typeof window === "undefined"
+      ? undefined
+      : browserLogoutDestination(result.browserLogoutUrl, window.location.origin);
+    return destination ? { success: true, browserLogoutUrl: destination } : { success: true };
   } catch (_error) {
     return {
       success: false,
@@ -134,7 +139,24 @@ export async function logout(): Promise<AuthResponse> {
     };
   }
 
-  return { success: true };
+}
+
+export function browserLogoutDestination(url: unknown, origin: string): string | undefined {
+  if (typeof url !== "string" || origin !== "https://factory.onesa.eu") return undefined;
+  try {
+    const destination = new URL(url);
+    if (
+      destination.origin !== "https://auth.onesa.eu" ||
+      destination.pathname !== "/oidc/logout" ||
+      destination.username || destination.password || destination.hash ||
+      destination.searchParams.size !== 2 ||
+      !/^[\w-]{16,128}$/.test(destination.searchParams.get("client_id") ?? "") ||
+      destination.searchParams.get("post_logout_redirect_uri") !== origin + "/"
+    ) return undefined;
+    return destination.href;
+  } catch {
+    return undefined;
+  }
 }
 
 export function isGitHubPagesDeployment(): boolean {

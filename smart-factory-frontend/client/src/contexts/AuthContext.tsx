@@ -81,8 +81,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = async () => {
+    let browserLogoutUrl: string | undefined;
     try {
       const result = await apiLogout();
+      browserLogoutUrl = result.browserLogoutUrl;
       if (!result.success)
         toast.error(
           "Local sign-out completed; server session revocation could not be confirmed. Contact an administrator to revoke sessions.",
@@ -97,6 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Always clear local state
       setUser(null);
     }
+    if (browserLogoutUrl) window.location.replace(browserLogoutUrl);
   };
   const refreshUser = async () => {
     const result = await getCurrentUser();
