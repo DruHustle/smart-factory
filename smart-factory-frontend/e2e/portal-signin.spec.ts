@@ -121,3 +121,16 @@ test("Identity registration returns to Factory before resuming the bookmarked as
   await page.getByRole("link",{name:"Back to Factory"}).click();
   await expect(page).toHaveURL("https://identity.example.test/authorize");
 });
+
+test("Identity registration opens the Factory workspace when verification returns in a fresh tab", async ({page,baseURL})=>{
+  await fixture(page);
+  const hosted = new URL("/#/login?registration=complete",baseURL);
+  hosted.hostname = "factory.localhost";
+  await page.route("**/api/auth/onesa/start",route=>{
+    expect(route.request().postDataJSON()).toEqual({returnTo:"#/"});
+    return route.fulfill({json:{url:"https://identity.example.test/authorize"}});
+  });
+  await page.route("https://identity.example.test/authorize",route=>route.fulfill({body:"Onesa sign-in"}));
+  await page.goto(hosted.href);
+  await expect(page).toHaveURL("https://identity.example.test/authorize");
+});
