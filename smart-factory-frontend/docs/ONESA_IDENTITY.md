@@ -27,7 +27,8 @@ characters), `ONESA_IDENTITY_CLIENT_SECRET` (48–256 characters), and
 retain a private `JWT_SECRET` of at least 32 bytes. These values are server-only;
 no `VITE_` setting may contain the secret. `PUBLIC_URL` is not required.
 
-`GET /api/auth/onesa/config` advertises only whether the connection is enabled.
+`GET /api/auth/onesa/config` advertises whether sign-in is enabled and the public
+issuer for a managed connection. Release checks require `https://auth.onesa.eu/`.
 `POST /api/auth/onesa/start` accepts an optional local hash `returnTo` and optional
 `link: { email, password }` proof. It checks the exact request Origin, rate limits
 attempts using PostgreSQL, and creates a five-minute, single-use transaction with

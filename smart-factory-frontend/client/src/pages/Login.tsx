@@ -102,8 +102,11 @@ export default function Login() {
     }
   }
   const [lastConfirmedDemoAccounts, setLastConfirmedDemoAccounts] =
-    useState<DemoAccountShortcut[]>(initialDemoAccounts);
+    useState<DemoAccountShortcut[]>(() =>
+      hostedWorkspace ? [] : initialDemoAccounts(),
+    );
   const demoAccountsQuery = trpc.auth.demoAccounts.useQuery(undefined, {
+    enabled: !hostedWorkspace,
     retry: 3,
     retryDelay: (attempt) => Math.min(1_000 * 2 ** attempt, 5_000),
     refetchOnWindowFocus: true,
@@ -119,7 +122,9 @@ export default function Login() {
       );
     else safeSessionStorage.removeItem(DEMO_ACCOUNT_CACHE_KEY);
   }, [demoAccountsQuery.data]);
-  const demoAccounts = demoAccountsQuery.data ?? lastConfirmedDemoAccounts;
+  const demoAccounts = hostedWorkspace
+    ? []
+    : demoAccountsQuery.data ?? lastConfirmedDemoAccounts;
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

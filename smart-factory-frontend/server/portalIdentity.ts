@@ -11,6 +11,8 @@ import { z } from "zod";
 import { getDb } from "./db";
 import type { User } from "../drizzle/schema";
 
+export { safeReturnPath } from "../shared/onesa-return-path";
+
 export type PortalUser = User & { onesaAccessPending?: boolean; onesaIdentityRole?:"user"|"admin" };
 export const randomValue = () => randomBytes(32).toString("base64url");
 export const digest = (value: string) =>
@@ -171,17 +173,6 @@ function openGrant(value: string) {
     cipher.update(bytes.subarray(28)),
     cipher.final(),
   ]).toString("utf8");
-}
-export function safeReturnPath(value: unknown) {
-  return typeof value === "string" &&
-    value.length <= 2048 &&
-    /^#\/(?!\/)/.test(value) &&
-    !/[\\\u0000-\u0020\u007f]/.test(value) &&
-    !/^#\/(?:login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(
-      value,
-    )
-    ? value
-    : "#/";
 }
 export async function verifyPortalSession(
   user: User,
