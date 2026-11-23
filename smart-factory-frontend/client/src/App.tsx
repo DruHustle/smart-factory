@@ -314,7 +314,7 @@ function AppRouter() {
 
 function App() {
   const hash = useWorkspaceHash();
-  const path = hash.slice(1).split("?")[0];
+  const path = "/" + hash.replace(/^#\/?/, "").split("?")[0];
   const recovering = path === "/reset-password";
   const portableDemo = /^\/passport\/demo\/[^/]+$/.test(path);
   if (hostedWorkspace && !hash)
