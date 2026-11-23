@@ -1,5 +1,6 @@
 import { safeSessionStorage } from "./storage";
 import { resolveApiBase } from "./api-base";
+import { safeReturnPath } from "@shared/onesa-return-path";
 const api = resolveApiBase(import.meta.env.VITE_API_URL, import.meta.env.PROD);
 // Local development simulations retain their disposable operator fixtures.
 export const hostedWorkspace = !["localhost", "127.0.0.1", "[::1]"].includes(
@@ -21,10 +22,7 @@ const registrationKey = "onesa.product-registration";
 export function rememberRegistration() {
   const hash = window.location.hash;
   const query = new URLSearchParams(hash.split("?")[1] || "");
-  const requested = query.get("returnTo") || hash;
-  const route = requested.startsWith("#/") && !requested.startsWith("#//") &&
-    !/[\\\u0000-\u0020]/.test(requested) && requested.length <= 2048 &&
-    !/^#\/(login|register|reset-password|forgot-password)(?:[/?#]|$)/.test(requested) ? requested : "#/";
+  const route = safeReturnPath(query.get("returnTo") || hash);
   safeSessionStorage.setItem(registrationKey, route);
 }
 
