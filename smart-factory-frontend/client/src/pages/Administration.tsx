@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { itemHref } from "@shared/inventory";
 import { toast } from "sonner";
+import { hostedWorkspace } from "@/lib/portal-account";
 const UserAccess = lazy(() => import("./UserAccess")),
   OnesaIntegration = lazy(() => import("./OnesaIntegration")),
   NodeRedPackages = lazy(
@@ -29,20 +30,24 @@ export default function Administration() {
   const { user } = useAuth(),
     { section = "integrations" } = useParams<{ section?: string }>(),
     [, navigate] = useWorkspaceLocation();
-  if (user?.access?.demoOnly) return <DemoAdministration section={section} />;
-  if (!user?.access?.canEngineer)
+  const access = user?.access;
+  if (!hostedWorkspace && access?.demoOnly)
+    return <DemoAdministration section={section} />;
+  if (!access || (hostedWorkspace ? !access.canAdminister : !access.canEngineer))
     return (
       <EmptyState
         title="Administration unavailable"
-        description="Use an individual engineering or administrator account on a private installation."
+        description={hostedWorkspace
+          ? "Sign in with an approved Factory administrator account."
+          : "Use an individual engineering or administrator account on a private installation."}
       />
     );
   const sections = [
-    ...(user.access.canAdminister
+    ...(access.canAdminister
       ? [{ id: "users", label: "Users & access" }]
       : []),
     { id: "integrations", label: "Integrations" },
-    ...(user.access.canAdminister
+    ...(access.canAdminister
       ? [
           { id: "audit", label: "Audit trail" },
           { id: "workspace", label: "Workspace settings" },
@@ -55,7 +60,7 @@ export default function Administration() {
         title="Administration"
         description="Connections, access and recorded workspace activity."
       />
-      {user.access.canAdminister && <p><a href="https://account.onesa.eu/admin?product=factory">Manage Onesa administrators</a></p>}
+      {access.canAdminister && <p><a href="https://account.onesa.eu/admin?product=factory">Manage Onesa administrators</a></p>}
       <SectionNav
         label="Administration sections"
         sections={sections}

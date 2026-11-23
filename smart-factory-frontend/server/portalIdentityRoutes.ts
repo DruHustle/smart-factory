@@ -131,7 +131,11 @@ export function installPortalIdentity(app: Express) {
   app.get("/api/auth/onesa/config", (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     try {
-      res.json({ enabled: !!portalConfig() });
+      const config = portalConfig();
+      res.json({
+        enabled: !!config,
+        issuer: config?.managed ? config.issuer : null,
+      });
     } catch {
       res.status(503).json({ error: "Onesa sign-in is unavailable." });
     }

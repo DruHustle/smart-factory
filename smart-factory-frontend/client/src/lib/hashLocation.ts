@@ -1,4 +1,16 @@
 import { useHashLocation } from "wouter/use-hash-location";
+import { useSyncExternalStore } from "react";
+
+function subscribeToHashChanges(notify: () => void) {
+  window.addEventListener("hashchange", notify);
+  return () => window.removeEventListener("hashchange", notify);
+}
+
+// The hosted tour at the bare URL and the signed-in overview at #/ have
+// distinct URLs even though the workspace router normalizes both to /.
+export function useWorkspaceHash() {
+  return useSyncExternalStore(subscribeToHashChanges, () => window.location.hash);
+}
 /** Keep workspace context inside the hash. Wouter's stock navigate moves ?query
  * to URL.search; that would discard nested return links and evidence filters. */
 export function navigateWorkspace(

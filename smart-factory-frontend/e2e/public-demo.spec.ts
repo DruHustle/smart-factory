@@ -1,4 +1,32 @@
 import { test, expect, request } from "@playwright/test";
+
+test("hosted visitors explore Factory without making a session request", async ({
+  page,
+  baseURL,
+}) => {
+  const hosted = new URL(baseURL!);
+  hosted.hostname = "factory.localhost";
+  const apiRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/"))
+      apiRequests.push(request.url());
+  });
+
+  await page.goto(hosted.href);
+  await expect(page.getByRole("heading", { name: "Explore with sample data" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Create account" })).toBeVisible();
+  await page.getByRole("link", { name: "View a sample product passport" }).click();
+  await expect(page.getByText("Demo product passport · simulated information")).toBeVisible();
+  expect(apiRequests).toEqual([]);
+
+  await page.goBack();
+  await page.getByRole("link", { name: "Open alerts and incidents" }).click();
+  await expect(page.getByRole("button", { name: "Continue with Onesa" })).toBeVisible();
+  expect(new URLSearchParams(new URL(page.url()).hash.split("?")[1]).get("returnTo")).toBe("#/alerts");
+  await expect(page.getByRole("group", { name: "Demo accounts" })).toHaveCount(0);
+  expect(apiRequests.some((url) => url.includes("auth.demoAccounts"))).toBe(false);
+});
+
 for (const role of ["Admin", "Engineer", "Operator", "Viewer"]) {
   test(`shared ${role} sees only approved fixtures and cannot mutate any operational domain`, async ({
     page,

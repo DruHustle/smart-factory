@@ -3,6 +3,7 @@ import { promotionCompatibility } from "../shared/runtime-contract";
 import { migrationManifest } from "../server/runtimeContract";
 import { frontendFetch } from "./frontend-fetch";
 import { expectedSources } from "./expected-sources.mts";
+import { requireOnesaSignIn } from "./require-onesa-sign-in";
 const origin = new URL(process.env.API_ORIGIN ?? "");
 if (
   origin.protocol !== "https:" ||
@@ -32,6 +33,7 @@ const error = promotionCompatibility(contract, {
   source: process.env.EXPECTED_API_SOURCE,
 });
 if (error) throw Error(error);
+await requireOnesaSignIn(origin);
 if (process.env.RUNTIME_EVIDENCE_FILE)
   await writeFile(
     process.env.RUNTIME_EVIDENCE_FILE,

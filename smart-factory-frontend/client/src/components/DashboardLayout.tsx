@@ -41,6 +41,7 @@ import { DashboardLayoutSkeleton } from "./DashboardLayoutSkeleton";
 import { Button } from "./ui/button";
 import { safeLocalStorage } from "@/lib/storage";
 import { hasMinimumRole } from "@/lib/access";
+import { hostedWorkspace } from "@/lib/portal-account";
 
 const menuItems = primaryDestinations;
 const groups = navigationGroups;
@@ -267,6 +268,7 @@ function DashboardLayoutContent({
     const items = group.items.filter(
       (i) =>
         (!["/demo", "/sandbox"].includes(i.path) || user?.access?.demoOnly) &&
+        (!hostedWorkspace || i.path !== "/administration" || user?.access?.canAdminister) &&
         (user?.access?.demoOnly ||
           !i.minRole ||
           hasMinimumRole(user?.role, i.minRole)),
