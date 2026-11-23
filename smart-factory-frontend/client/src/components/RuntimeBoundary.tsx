@@ -7,25 +7,16 @@ import {
 } from "react";
 import { resolveApiBase } from "@/lib/api-base";
 import { runtimeCompatibility } from "@shared/runtime-contract";
-import { useWorkspaceLocation } from "@/lib/hashLocation";
 const RuntimeCapabilities = createContext<readonly string[]>([]);
 export function useRuntimeCapability(capability: string) {
   return useContext(RuntimeCapabilities).includes(capability);
 }
 /** Prevent a newer UI issuing incompatible requests to an older API. */
 export function RuntimeBoundary({ children }: { children: ReactNode }) {
-  const [location] = useWorkspaceLocation();
-  // This route renders only a bounded synthetic identity and bundled demo AAS.
-  // It has no API consumer; every normal application route still requires the gate.
-  const portableDemo = /^\/passport\/demo\/[^/]+$/.test(location.split("?")[0]);
   const [state, setState] = useState<string | null | undefined>(),
     [capabilities, setCapabilities] = useState<string[]>([]),
     [attempt, setAttempt] = useState(0);
   useEffect(() => {
-    if (portableDemo) {
-      setState(undefined);
-      return;
-    }
     const controller = new AbortController();
     setState(undefined);
     fetch(
@@ -53,10 +44,10 @@ export function RuntimeBoundary({ children }: { children: ReactNode }) {
           );
       });
     return () => controller.abort();
-  }, [attempt, portableDemo]);
-  if (portableDemo || state === null)
+  }, [attempt]);
+  if (state === null)
     return (
-      <RuntimeCapabilities.Provider value={portableDemo ? [] : capabilities}>
+      <RuntimeCapabilities.Provider value={capabilities}>
         {children}
       </RuntimeCapabilities.Provider>
     );

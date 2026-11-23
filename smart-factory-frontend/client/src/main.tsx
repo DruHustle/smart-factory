@@ -23,7 +23,6 @@ import {
 import { clearAssistantSession } from "@/lib/assistant-session";
 import App from "./App";
 import { ThemeProvider } from "./contexts/ThemeContext";
-import { RuntimeBoundary } from "./components/RuntimeBoundary";
 import "./index.css";
 
 // Account links from other Onesa products may use ordinary paths. Internally,
@@ -110,9 +109,7 @@ createRoot(document.getElementById("root")!).render(
   <trpc.Provider client={trpcClient} queryClient={queryClient}>
     <QueryClientProvider client={queryClient}>
       <ThemeProvider switchable>
-        <RuntimeBoundary>
-          <App />
-        </RuntimeBoundary>
+        <App />
       </ThemeProvider>
     </QueryClientProvider>
   </trpc.Provider>,
