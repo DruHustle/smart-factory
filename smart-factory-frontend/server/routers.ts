@@ -8,7 +8,7 @@ import { isPlannedAsset } from "./planned-assets";
 import { factoriesRouter } from "./factories";
 import { deleteAssetInventoryRecord } from "./inventory-deletion";
 import { requestedDataWorkspace } from "../shared/data-workspace";
-import { portalRequired } from "./portalIdentity";
+import { factoryBrowserLogout, portalRequired } from "./portalIdentity";
 import { publicDemoDeployment } from "../shared/access-policy";
 import {
   notificationPage,
@@ -731,13 +731,20 @@ export const appRouter = router({
         return { user: publicUser(updated) };
       }),
     logout: publicProcedure.mutation(async ({ ctx }) => {
+      let sessionId: string | null;
       try {
-        const sessionId = await sdk.revokeRequestSession(ctx.req);
+        sessionId = await sdk.revokeRequestSession(ctx.req);
         if (sessionId) await wsManager.invalidateSession(sessionId);
       } finally {
         ctx.res.clearCookie(COOKIE_NAME, getSessionCookieOptions(ctx.req));
       }
-      return { success: true };
+      const browserLogoutUrl = sessionId &&
+        ctx.session?.onesa &&
+        ctx.session.sessionId === sessionId &&
+        !ctx.req.headers.authorization
+        ? factoryBrowserLogout(ctx.req.headers.origin)
+        : undefined;
+      return browserLogoutUrl ? { success: true, browserLogoutUrl } : { success: true };
     }),
   }),
 

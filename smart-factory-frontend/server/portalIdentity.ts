@@ -45,6 +45,24 @@ export function portalConfig(env = process.env) {
   return { issuer, client, secret, redirect, origin: callback.origin, managed };
 }
 export type PortalConfig = NonNullable<ReturnType<typeof portalConfig>>;
+export function factoryBrowserLogout(origin: string | undefined): string | undefined {
+  if (
+    process.env.ONESA_IDENTITY_BROWSER_LOGOUT_ENABLED !== "true" ||
+    origin !== "https://factory.onesa.eu"
+  ) return undefined;
+  try {
+    const config = portalConfig();
+    if (!config?.managed || config.issuer !== "https://auth.onesa.eu/" || config.origin !== origin)
+      return undefined;
+    const destination = new URL("oidc/logout", config.issuer);
+    destination.searchParams.set("client_id", config.client);
+    destination.searchParams.set("post_logout_redirect_uri", new URL("/", origin).href);
+    return destination.href;
+  } catch {
+    // The local revocation has already succeeded, even if optional SSO configuration is unavailable.
+    return undefined;
+  }
+}
 export class InactivePortalIdentity extends Error {}
 export async function portalDatabase() {
   const db = await getDb();
