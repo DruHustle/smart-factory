@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   PendingOnesaTransactions,
   nativeCode,
+  nativeRegistrationDestination,
   type PendingOnesa,
 } from "../src/callback";
 
@@ -139,4 +140,41 @@ test("only one delivery claims a native transaction, and old cleanup preserves a
   );
   await assert.rejects(transactions.claim(denial, origin), /onesa_denied/);
   assert.equal(await transactions.claim(callback, origin), null);
+});
+
+test("the matching native callback can arrive after the browser closes", async () => {
+  let saved: string | null = null;
+  const transactions = new PendingOnesaTransactions({
+    read: async () => saved,
+    write: async value => { saved = value; },
+    remove: async () => { saved = null; },
+  });
+  const attempt: PendingOnesa = {
+    origin: "https://factory.example.test",
+    issuer: "https://issuer.example.test/",
+    state: "synthetic-attempt",
+    verifier: "synthetic-verifier",
+    destination: "17",
+    expires: Date.now() + 300_000,
+  };
+  const callback = "eu.onesa.factory://signin/callback?code=fixture&state=synthetic-attempt";
+
+  assert.equal(await transactions.open(attempt, async () => ({ type: "dismiss" })), null);
+  await assert.rejects(
+    transactions.claim(callback + "&state=wrong-attempt", attempt.origin),
+    /unauthorized/,
+  );
+  assert.deepEqual(await transactions.claim(callback, attempt.origin), {
+    pending: attempt,
+    code: "fixture",
+  });
+  assert.equal(await transactions.claim(callback, attempt.origin), null);
+});
+
+test("registration retains a selected destination only during its pending window", () => {
+  const expires = 1000;
+  assert.equal(nativeRegistrationDestination(JSON.stringify({ destination: "17", expires }), 999), "17");
+  assert.equal(nativeRegistrationDestination(JSON.stringify({ destination: null, expires }), 999), null);
+  assert.equal(nativeRegistrationDestination(JSON.stringify({ destination: "17", expires }), 1000), undefined);
+  assert.equal(nativeRegistrationDestination(JSON.stringify({ destination: "17" }), 999), undefined);
 });
