@@ -82,6 +82,12 @@ telemetry qualification remains an independent requirement.
 
 Use `ONESA_IDENTITY_ENABLED=true` with the managed Auth0 issuer `https://auth.onesa.eu/`, the registered confidential client ID and secret, exact `/api/auth/onesa/callback` URI and existing public dashboard origin. Set `ONESA_IDENTITY_AUDIENCE` to the Factory API identifier (proposed `https://api.factory.onesa.eu`), `ONESA_IDENTITY_ACCOUNT_ORIGIN` to the central Identity UI and `ONESA_IDENTITY_PUBLIC_JWKS` to the managed issuer’s trusted public current/next RS256 signing keys. Stage replacement keys before enabling their use. The callback uses code + S256 and verifies the signed ID token nonce and the signed access token. Only the Factory grant and `user` role authorize entry. Factory retains its own role and equipment permissions. An approved local admin additionally needs an MFA timestamp within 300 seconds.
 
+With managed sign-in already verified, `ONESA_IDENTITY_BROWSER_LOGOUT_ENABLED=true`
+lets the Factory web dashboard end the Auth0 browser session after revoking
+the local Factory session. Register the exact `https://factory.onesa.eu/` return
+in the Factory Auth0 application's Allowed Logout URLs and verify a complete
+browser sign-in and sign-out before enabling. The option defaults off.
+
 Configure `ONESA_IDENTITY_MAPPING_ISSUER` to the exact old Portal issuer already used by verified Factory links in this environment. The managed issuer’s signed stable Onesa UUID maps to that existing identity. For unlinked accounts the existing dual-authentication flow proves local ownership. Existing subject links, operator recovery access, equipment identity and control-plane credentials remain owned by Factory.
 
 During an Identity outage, an issued session is bounded by its locally validated signed grant (maximum 300 seconds) including after API restart with the configured keys. New login, renewal through sign-in and fresh factor verification require service recovery. Local deactivation and authorization remain in force during that period. A new authorization code is required after expiry. `ONESA_IDENTITY_AUDIENCE` must remain unset for the legacy provider during pre-cutover operation or rollback; sessions using the other token format will require sign-in again. Record and reconcile local changes before reverting issuer settings.
