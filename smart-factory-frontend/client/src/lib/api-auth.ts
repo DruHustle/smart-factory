@@ -12,6 +12,7 @@ import type { AppRouter } from "../../../server/routers";
 import { userFacingApiError } from "./errors";
 import type { AccountCapabilities } from "@shared/access-policy";
 import { fetchInDataWorkspace } from "./data-workspace-sync";
+import { safeReturnPath } from "@shared/onesa-return-path";
 export type PublicUser = Omit<User, "password" | "authVersion"> & {
   access?: AccountCapabilities;
 };
@@ -44,7 +45,7 @@ export async function startOnesa(link?: { email: string; password: string }) {
   const login = current.startsWith("#/login?")
     ? new URLSearchParams(current.slice(current.indexOf("?") + 1))
     : null;
-  const returnTo = login ? login.get("returnTo") || "#/" : current || "#/";
+  const returnTo = safeReturnPath(login ? login.get("returnTo") : current);
   const response = await fetch(`${API_BASE_URL}/auth/onesa/start`, {
     method: "POST",
     credentials: "include",

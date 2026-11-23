@@ -11,12 +11,16 @@ import {
   Switch,
   Router as WouterRouter,
 } from "wouter";
-import { useWorkspaceLocation as useHashLocation } from "@/lib/hashLocation";
+import {
+  useWorkspaceHash,
+  useWorkspaceLocation as useHashLocation,
+} from "@/lib/hashLocation";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import DashboardLayout from "./components/DashboardLayout";
 import { canAdministerUsers, canViewEngineering } from "@/lib/access";
 import { filterPasswordRecoveryAnalytics } from "@/lib/password-recovery-link";
+import { safeReturnPath } from "@shared/onesa-return-path";
 
 const Inventory = lazy(() => import("./pages/Inventory"));
 const IndustrialConnectivity = lazy(
@@ -54,6 +58,7 @@ const UserAccess = lazy(() => import("./pages/UserAccess"));
 const ProductPassport = lazy(() => import("./pages/ProductPassport"));
 const DemoProductPassport = lazy(() => import("./pages/DemoProductPassport"));
 const ChangePassword = lazy(() => import("./pages/ChangePassword"));
+const FactoryWelcome = lazy(() => import("./pages/FactoryWelcome"));
 
 // Keep hash query context available to each workspace while matching the route path.
 function useHashPath(): ReturnType<typeof useHashLocation> {
@@ -202,6 +207,14 @@ function AppRouter() {
         <ChangePassword />
       </Suspense>
     );
+  if (hostedWorkspace && path === "/login") {
+    const params = new URLSearchParams(location.split("?")[1] ?? "");
+    return (
+      <WouterRouter hook={useHashPath}>
+        <Redirect to={safeReturnPath(params.get("returnTo")).slice(1)} replace />
+      </WouterRouter>
+    );
+  }
   return (
     <WouterRouter hook={useHashPath}>
       <Suspense fallback={<RouteLoading />}>
@@ -300,9 +313,18 @@ function AppRouter() {
 }
 
 function App() {
-  const [location] = useHashLocation();
-  const recovering = location.split("?")[0] === "/reset-password";
-  const portableDemo = /^\/passport\/demo\/[^/]+$/.test(location.split("?")[0]);
+  const hash = useWorkspaceHash();
+  const path = hash.slice(1).split("?")[0];
+  const recovering = path === "/reset-password";
+  const portableDemo = /^\/passport\/demo\/[^/]+$/.test(path);
+  if (hostedWorkspace && !hash)
+    return (
+      <ErrorBoundary>
+        <Suspense fallback={<RouteLoading />}>
+          <FactoryWelcome />
+        </Suspense>
+      </ErrorBoundary>
+    );
   // A QR demonstration is a self-contained, synthetic document. Do not query
   // an account, expose workspace chrome or emit its identity to analytics.
   if (portableDemo)

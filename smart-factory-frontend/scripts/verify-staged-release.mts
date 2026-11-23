@@ -1,6 +1,7 @@
 import { promotionCompatibility, releaseIdentityCompatibility } from "../shared/runtime-contract";
 import { migrationManifest } from "../server/runtimeContract";
 import { verifyIndustrialRelease } from "./industrial-release";
+import { requireOnesaSignIn } from "./require-onesa-sign-in";
 
 const origin = new URL(process.env.STAGED_ORIGIN ?? "");
 const revision = process.env.RELEASE_SHA ?? "";
@@ -55,5 +56,6 @@ const runtimeError = promotionCompatibility(await json("/api/runtime/contract"),
   source: revision, backend: revision, edge: revision, schemaDigest: schema.digest,
 });
 if (runtimeError) throw Error(runtimeError);
+await requireOnesaSignIn(origin, checkedFetch);
 const assets = await verifyIndustrialRelease(origin, checkedFetch);
 console.log(JSON.stringify({ stagedOrigin: origin.origin, revision, verifiedAssets: assets.length }));
