@@ -16,6 +16,7 @@ import {
   useWorkspaceLocation as useHashLocation,
 } from "@/lib/hashLocation";
 import ErrorBoundary from "./components/ErrorBoundary";
+import { RuntimeBoundary } from "./components/RuntimeBoundary";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import DashboardLayout from "./components/DashboardLayout";
 import { canAdministerUsers, canViewEngineering } from "@/lib/access";
@@ -342,15 +343,17 @@ function App() {
     );
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <AppRouter />
-          {import.meta.env.PROD && !recovering && (
-            <Analytics beforeSend={filterPasswordRecoveryAnalytics} />
-          )}
-        </TooltipProvider>
-      </AuthProvider>
+      <RuntimeBoundary>
+        <AuthProvider>
+          <TooltipProvider>
+            <Toaster />
+            <AppRouter />
+            {import.meta.env.PROD && !recovering && (
+              <Analytics beforeSend={filterPasswordRecoveryAnalytics} />
+            )}
+          </TooltipProvider>
+        </AuthProvider>
+      </RuntimeBoundary>
     </ErrorBoundary>
   );
 }
