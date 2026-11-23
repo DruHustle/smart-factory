@@ -19,4 +19,6 @@ export async function requireOnesaSignIn(
   const config = await response.json();
   if (config?.enabled !== true)
     throw Error("Factory Onesa sign-in is disabled");
+  if (config.issuer !== "https://auth.onesa.eu/")
+    throw Error("Factory release requires the canonical Onesa Auth0 issuer");
 }
