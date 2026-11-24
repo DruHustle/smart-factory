@@ -2,7 +2,7 @@ import { Platform } from "react-native";
 import * as Crypto from "expo-crypto";
 import * as SecureStore from "expo-secure-store";
 import { openAuthSessionAsync } from "expo-web-browser";
-import { PendingOnesaTransactions } from "./callback";
+import { nativeRegistrationDestination, PendingOnesaTransactions } from "./callback";
 import { issuer, origin, redirect } from "./config";
 
 const key = "operator.signin.pending";
@@ -57,27 +57,10 @@ export async function start(destination: string | null) {
     code_challenge_method: "S256",
     redirect_uri: redirect,
   });
-  await transactions.save({
-    origin,
-    issuer,
-    state,
-    verifier,
-    nonce,
-    destination,
-    expires: Date.now() + 300000,
-  });
-  try {
-    const result = await openAuthSessionAsync(
-      issuer + "authorize?" + params,
-      redirect,
-    );
-    if (result.type === "success") return result.url;
-    await transactions.clear(state);
-    return null;
-  } catch (error) {
-    await transactions.clear(state);
-    throw error;
-  }
+  return transactions.open(
+    { origin, issuer, state, verifier, nonce, destination, expires: Date.now() + 300_000 },
+    () => openAuthSessionAsync(issuer + "authorize?" + params, redirect),
+  );
 }
 
 export async function finish(url: string) {
@@ -110,13 +93,16 @@ export const registrationReturn = "eu.onesa.factory://signin/registered";
 
 export async function register(destination: string | null,audience:"user"|"admin") {
   if (Platform.OS !== "ios" && Platform.OS !== "android") throw Error("Unsupported registration platform.");
-  await SecureStore.setItemAsync(registrationKey, JSON.stringify({destination}), {
+  await SecureStore.setItemAsync(registrationKey, JSON.stringify({
+    destination,
+    expires: Date.now() + 30 * 60_000,
+  }), {
     keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
   });
   const url = "https://account.onesa.eu/register?audience="+audience+"&product=factory&platform=" + Platform.OS;
   const result = await openAuthSessionAsync(url, registrationReturn);
   if (result.type === "success" && result.url === registrationReturn) return result.url;
-  await SecureStore.deleteItemAsync(registrationKey);
+  // A late registration callback can still start the separate sign-in flow.
   return null;
 }
 
@@ -124,6 +110,5 @@ export async function registeredDestination(): Promise<string | null | undefined
   const stored = await SecureStore.getItemAsync(registrationKey);
   if (!stored) return undefined;
   await SecureStore.deleteItemAsync(registrationKey);
-  const {destination} = JSON.parse(stored);
-  return typeof destination === "string" ? destination : null;
+  return nativeRegistrationDestination(stored);
 }

@@ -67,6 +67,23 @@ export class PendingOnesaTransactions {
     return this.serialize(() => this.store.write(JSON.stringify(attempt)));
   }
 
+  async open(
+    attempt: PendingOnesa,
+    openBrowser: () => Promise<{ type: string; url?: string }>,
+  ): Promise<string | null> {
+    await this.save(attempt);
+    try {
+      const result = await openBrowser();
+      if (result.type === "success" && result.url) return result.url;
+      // The OS can close its browser before Linking delivers the callback.
+      // Keep the transaction available for its bounded, single-use lifetime.
+      return null;
+    } catch (error) {
+      await this.clear(attempt.state);
+      throw error;
+    }
+  }
+
   clear(state: string): Promise<void> {
     return this.serialize(async () => {
       const raw = await this.store.read();
@@ -94,5 +111,25 @@ export class PendingOnesaTransactions {
       await this.store.remove();
       return { pending, code };
     });
+  }
+}
+
+export function nativeRegistrationDestination(
+  stored: string,
+  now = Date.now(),
+): string | null | undefined {
+  try {
+    const attempt = JSON.parse(stored) as {
+      destination?: unknown;
+      expires?: unknown;
+    } | null;
+    if (
+      typeof attempt?.expires !== "number" ||
+      !Number.isFinite(attempt.expires) ||
+      attempt.expires <= now
+    ) return undefined;
+    return typeof attempt.destination === "string" ? attempt.destination : null;
+  } catch {
+    return undefined;
   }
 }

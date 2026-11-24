@@ -52,9 +52,14 @@ export default function App() {
     safeError(e);
   }
   const resumingRegistration = useRef(false);
+  const registrationBrowser = useRef<{ returned: boolean } | null>(null);
   async function receive(url: string) {
     try {
       if (url === registrationReturn) {
+        if (registrationBrowser.current) {
+          registrationBrowser.current.returned = true;
+          return;
+        }
         if (resumingRegistration.current) return;
         resumingRegistration.current = true;
         try {
@@ -209,11 +214,18 @@ export default function App() {
                 onPress={async () => {
                   if (submitting.current) return;
                   submitting.current = true; setBusy(true);
+                  const opening = { returned: false };
+                  registrationBrowser.current = opening;
                   try {
                     const url = await register(destination,audience);
-                    if (url) await receive(url);
+                    // The second browser flow can start once registration closes.
+                    registrationBrowser.current = null;
+                    if (url || opening.returned) await receive(registrationReturn);
                   } catch (e) { fail(e); }
-                  finally { submitting.current = false; setBusy(false); }
+                  finally {
+                    if (registrationBrowser.current === opening) registrationBrowser.current = null;
+                    submitting.current = false; setBusy(false);
+                  }
                 }}
               />)}
             </View>
