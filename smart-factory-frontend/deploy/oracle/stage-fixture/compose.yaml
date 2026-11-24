@@ -29,7 +29,7 @@
     },
     "broker": {
       "image": "rabbitmq:4.3.6-management",
-      "environment": {"RABBITMQ_DEFAULT_USER": "fixture", "RABBITMQ_DEFAULT_PASS": "synthetic-stage-only", "RABBITMQ_VM_MEMORY_HIGH_WATERMARK": "0.55"},
+      "environment": {"RABBITMQ_DEFAULT_USER": "fixture", "RABBITMQ_DEFAULT_PASS": "synthetic-stage-only"},
       "command": ["sh", "-ec", "rabbitmq-plugins enable --offline rabbitmq_mqtt && exec rabbitmq-server"],
       "networks": ["fixture"],
       "mem_limit": "384m",

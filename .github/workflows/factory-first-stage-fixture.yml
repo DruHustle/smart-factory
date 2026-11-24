@@ -89,7 +89,28 @@ jobs:
           export FACTORY_STAGE_TLS_DIR="$FACTORY_FIXTURE_DIR/tls"
           bash smart-factory-frontend/deploy/oracle/stage-fixture/generate-tls.sh "$FACTORY_STAGE_TLS_DIR"
           compose=("${docker_local[@]}" compose --env-file /dev/null --project-name "$FIXTURE_PROJECT" --file smart-factory-frontend/deploy/oracle/stage-fixture/compose.yaml)
-          trap '"${compose[@]}" down --timeout 12 --volumes >/dev/null' EXIT
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              "${compose[@]}" ps --all || true
+              for service in broker api stage-proxy worker; do
+                printf '%s: ' "$service"
+                "${compose[@]}" logs --no-color --tail 80 "$service" | python3 -c '
+          import sys
+          lines = sys.stdin.read().lower()
+          markers = {"deprecated environment": "deprecated broker settings",
+                     "bundle startup failed": "packaged app startup stopped",
+                     "connection refused": "connection refused",
+                     "certificate verify failed": "certificate verification failed",
+                     "permission denied": "permission denied",
+                     "out of memory": "memory exhausted"}
+          print(", ".join(label for needle, label in markers.items() if needle in lines) or "no known startup category")
+          ' || true
+              done
+            fi
+            "${compose[@]}" down --timeout 12 --volumes >/dev/null
+          }
+          trap cleanup EXIT
           "${compose[@]}" config --quiet
           "${compose[@]}" up -d --wait --wait-timeout 360 api stage-proxy
           curl_in_api=("${compose[@]}" exec -T api curl --noproxy '*' --silent --fail --max-time 6)
