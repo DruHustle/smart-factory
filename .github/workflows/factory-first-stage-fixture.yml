@@ -1,0 +1,148 @@
+name: Factory isolated first-boot fixture
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/factory-first-stage-fixture.yml"
+      - "smart-factory-frontend/deploy/oracle/stage-fixture/**"
+      - "smart-factory-frontend/scripts/prepare-stage-fixture.py"
+      - "smart-factory-frontend/scripts/tests/test_stage_fixture.py"
+permissions:
+  actions: read
+  contents: read
+concurrency:
+  group: factory-first-stage-fixture-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  first-boot:
+    if: github.repository == 'DruHustle/smart-factory' && github.event.repository.private == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    env:
+      FACTORY_STAGE_BASE: ${{ github.event.pull_request.base.sha }}
+      FIXTURE_PROJECT: smart-factory-stage-fixture
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - name: Verify local Docker and fixture tests
+        run: |
+          set -euo pipefail
+          test "$RUNNER_ENVIRONMENT" = github-hosted
+          test "$(uname -m)" = aarch64
+          test -S /var/run/docker.sock
+          python3 -m unittest discover -s smart-factory-frontend/scripts/tests -p test_stage_fixture.py -v
+      - name: Download the independently qualified main artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          fixture_dir=$(mktemp -d "$RUNNER_TEMP/factory-first-stage.XXXXXX")
+          export FACTORY_FIXTURE_DIR="$fixture_dir"
+          printf 'FACTORY_FIXTURE_DIR=%s\n' "$fixture_dir" >> "$GITHUB_ENV"
+          PYTHONPATH=scripts python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          import subprocess
+          import sys
+
+          from release_gate import REPOSITORY, api, artifact_identity, check_ci, require, sha
+
+          revision = sha(os.environ["FACTORY_STAGE_BASE"])
+          destination = Path(os.environ["FACTORY_FIXTURE_DIR"])
+          run_id = check_ci(revision)["bundle-arm64.yml"]
+          artifacts = api(f"actions/runs/{run_id}/artifacts?per_page=100")["artifacts"]
+          matches = [item for item in artifacts if item["name"] == "qualified-arm64-bundle"]
+          require(len(matches) == 1, "The approved upstream run must have one qualified bundle.")
+          item = matches[0]
+          digest = artifact_identity(item, run_id, revision)
+          bundle = destination / "qualified-arm64-bundle.zip"
+          with bundle.open("xb") as output:
+              os.fchmod(output.fileno(), 0o600)
+              subprocess.run(
+                  ["gh", "api", "--hostname", "github.com", f'repos/{REPOSITORY}/actions/artifacts/{item["id"]}/zip'],
+                  stdout=output, check=True, timeout=300,
+              )
+          receipt = subprocess.check_output([
+              sys.executable, "smart-factory-frontend/scripts/prepare-stage-fixture.py",
+              "--bundle", str(bundle), "--output", str(destination / "candidate.tar.gz"),
+              "--revision", revision, "--zip-sha256", digest, "--zip-bytes", str(item["size_in_bytes"]),
+          ], text=True, timeout=180)
+          (destination / "candidate.json").write_text(receipt)
+          print(json.dumps({"runId": run_id, "artifactId": item["id"], "zipSha256": digest, **json.loads(receipt)}))
+          PY
+      - name: Start fresh isolated dependencies, the API, then one worker
+        run: |
+          set -euo pipefail
+          unset DOCKER_HOST DOCKER_CONTEXT
+          docker_local=(docker --host unix:///var/run/docker.sock)
+          labels="label=com.docker.compose.project=$FIXTURE_PROJECT"
+          test -z "$("${docker_local[@]}" container ls -aq --filter "$labels")"
+          test -z "$("${docker_local[@]}" network ls -q --filter "$labels")"
+          test -z "$("${docker_local[@]}" volume ls -q --filter "$labels")"
+          test -z "$("${docker_local[@]}" image ls -q --filter reference=factory-qualified:candidate)"
+          "${docker_local[@]}" image load --input "$FACTORY_FIXTURE_DIR/candidate.tar.gz"
+          FACTORY_STAGE_IMAGE_ID=$("${docker_local[@]}" image inspect -f '{{.Id}}' factory-qualified:candidate)
+          export FACTORY_STAGE_IMAGE_ID
+          jq -e --arg id "$FACTORY_STAGE_IMAGE_ID" '$id == .imageId or $id == .ociManifest' "$FACTORY_FIXTURE_DIR/candidate.json" >/dev/null
+          export FACTORY_STAGE_TLS_DIR="$FACTORY_FIXTURE_DIR/tls"
+          bash smart-factory-frontend/deploy/oracle/stage-fixture/generate-tls.sh "$FACTORY_STAGE_TLS_DIR"
+          export FACTORY_STAGE_TLS_USER="$(id -u):$(id -g)"
+          compose=("${docker_local[@]}" compose --env-file /dev/null --project-name "$FIXTURE_PROJECT" --file smart-factory-frontend/deploy/oracle/stage-fixture/compose.yaml)
+          cleanup() {
+            status=$?
+            if [ "$status" -ne 0 ]; then
+              "${compose[@]}" ps --all || true
+              for service in broker api stage-proxy worker; do
+                printf '%s: ' "$service"
+                "${compose[@]}" logs --no-color --tail 80 "$service" | python3 -c '
+          import sys
+          lines = sys.stdin.read().lower()
+          markers = {"deprecated environment": "deprecated broker settings",
+                     "bundle startup failed": "packaged app startup stopped",
+                     "connection refused": "connection refused",
+                     "certificate verify failed": "certificate verification failed",
+                     "permission denied": "permission denied",
+                     "out of memory": "memory exhausted"}
+          print(", ".join(label for needle, label in markers.items() if needle in lines) or "no known startup category")
+          ' || true
+              done
+            fi
+            "${compose[@]}" down --timeout 12 --volumes >/dev/null
+          }
+          trap cleanup EXIT
+          "${compose[@]}" config --quiet
+          "${compose[@]}" up -d --wait --wait-timeout 360 api stage-proxy
+          curl_in_api=("${compose[@]}" exec -T api curl --noproxy '*' --silent --fail --max-time 6)
+          target=https://stage-proxy:8443
+          "${curl_in_api[@]}" --cacert /stage-trust/ca.crt "$target/health/ready"
+          if "${curl_in_api[@]}" "$target/health/ready"; then
+            echo "Unexpected trust without the fixture CA." >&2
+            exit 1
+          else
+            test "$?" = 60
+          fi
+          if "${curl_in_api[@]}" --cacert /stage-trust/ca.crt --connect-to wrong-stage:8443:stage-proxy:8443 https://wrong-stage:8443/health/ready; then
+            echo "Unexpected trust for a wrong TLS name." >&2
+            exit 1
+          else
+            status=$?
+            test "$status" = 35 || test "$status" = 60
+          fi
+          "${compose[@]}" up -d --wait --wait-timeout 360 worker
+          test "$("${compose[@]}" ps -q worker | wc -l)" -eq 1
+          verified=false
+          for _ in {1..24}; do
+            if "${curl_in_api[@]}" --cacert /stage-trust/ca.crt "$target/api/runtime/contract" | jq -e --arg sha "$FACTORY_STAGE_BASE" '
+              .source == $sha and .backendSource == $sha and .edgeSource == $sha and .schema.ready == true
+              and .contractVersion == 2 and .deployment == "bundle" and .versioned == true
+              and .worker.fresh == true and .worker.compatible == true
+            ' >/dev/null; then
+              verified=true
+              break
+            fi
+            sleep 5
+          done
+          test "$verified" = true
+          echo "The exact image passed its isolated API, private TLS, schema, and singleton worker checks."

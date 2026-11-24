@@ -1,0 +1,9 @@
+{
+	admin off
+	auto_https disable_redirects
+}
+
+https://stage-proxy:8443 {
+	tls /stage-tls/proxy.crt /stage-tls/proxy.key
+	reverse_proxy api:10000
+}

@@ -114,6 +114,12 @@ worker, retain the current frontend deployment, and preserve the source VM's
 disks until the replacement and recovery path are verified. Starting another
 worker merely to satisfy the existing-release preflight is not a bootstrap path.
 
+For a first boot with an empty, synthetic data set, use the
+[isolated split-role fixture](../smart-factory-frontend/deploy/oracle/stage-fixture/README.md).
+It verifies the qualified candidate image separately and starts without a prior
+installation or public ingress. Obtain an independent hosted staging receipt
+before using any of the controlled release steps below.
+
 Only after that read-only preflight succeeds, run the same command with
 `--deploy` instead of `--check`. Use its private receipt and `--status` to reconnect;
 never start another deployment just because the local session disconnected.
