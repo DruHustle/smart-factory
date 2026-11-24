@@ -55,7 +55,9 @@ and OCI manifest ID is
 2. Load the verified candidate archive. Read the loaded image ID and source
    labels and match them to the receipt. Export the full loaded image ID as
    `FACTORY_STAGE_IMAGE_ID`, and the absolute certificates directory as
-   `FACTORY_STAGE_TLS_DIR`. Use only this Compose file, the explicit
+   `FACTORY_STAGE_TLS_DIR`. Set `FACTORY_STAGE_TLS_USER` to the certificate
+   generator's numeric UID and GID (for example, `"$(id -u):$(id -g)"`).
+   Use only this Compose file, the explicit
    `smart-factory-stage-fixture` project name and `--env-file /dev/null`.
 3. Run Compose configuration validation, then `up -d --wait api stage-proxy`.
    From the API container, check

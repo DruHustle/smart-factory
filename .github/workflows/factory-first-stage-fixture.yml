@@ -88,6 +88,7 @@ jobs:
           jq -e --arg id "$FACTORY_STAGE_IMAGE_ID" '$id == .imageId or $id == .ociManifest' "$FACTORY_FIXTURE_DIR/candidate.json" >/dev/null
           export FACTORY_STAGE_TLS_DIR="$FACTORY_FIXTURE_DIR/tls"
           bash smart-factory-frontend/deploy/oracle/stage-fixture/generate-tls.sh "$FACTORY_STAGE_TLS_DIR"
+          export FACTORY_STAGE_TLS_USER="$(id -u):$(id -g)"
           compose=("${docker_local[@]}" compose --env-file /dev/null --project-name "$FIXTURE_PROJECT" --file smart-factory-frontend/deploy/oracle/stage-fixture/compose.yaml)
           cleanup() {
             status=$?

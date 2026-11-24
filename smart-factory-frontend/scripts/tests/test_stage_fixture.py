@@ -57,6 +57,9 @@ class StageFixtureTests(unittest.TestCase):
         self.assertEqual(worker["environment"]["DASHBOARD_API_ORIGIN"], "https://stage-proxy:8443")
         self.assertEqual(worker["environment"]["SSL_CERT_FILE"], "/stage-trust/ca.crt")
         self.assertNotIn("key", "".join(worker["volumes"]))
+        proxy = services["stage-proxy"]
+        self.assertIn("FACTORY_STAGE_TLS_USER:?", proxy["user"])
+        self.assertEqual(proxy["cap_drop"], ["ALL"])
 
     def test_fixture_tls_authenticates_only_the_expected_private_proxy(self):
         with tempfile.TemporaryDirectory() as directory:

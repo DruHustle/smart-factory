@@ -81,6 +81,8 @@
     },
     "stage-proxy": {
       "image": "caddy:2.10-alpine",
+      "user": "${FACTORY_STAGE_TLS_USER:?Set the UID and GID that own the private stage TLS files}",
+      "environment": {"HOME": "/tmp", "XDG_DATA_HOME": "/tmp/fixture-caddy-data", "XDG_CONFIG_HOME": "/tmp/fixture-caddy-config"},
       "depends_on": {"api": {"condition": "service_healthy"}},
       "volumes": [
         "./Caddyfile:/etc/caddy/Caddyfile:ro",
