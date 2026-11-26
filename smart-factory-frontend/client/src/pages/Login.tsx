@@ -96,7 +96,7 @@ export default function Login() {
       await startOnesa(link ? { email: email.trim(), password } : undefined);
     } catch {
       setError(
-        "Onesa sign-in could not be completed. Check your details and try again.",
+        "Sign-in could not be completed. Check your details and try again.",
       );
       setIsLoading(false);
     }
@@ -189,7 +189,7 @@ export default function Login() {
           {/* Subtitle */}
           <CardDescription className="text-muted-foreground">
             {hostedWorkspace
-              ? "Use your existing Onesa account to open Smart Factory."
+              ? "Sign in to Smart Factory."
               : "Industrial Monitoring & Control Platform"}
           </CardDescription>
         </CardHeader>
@@ -198,12 +198,12 @@ export default function Login() {
           {onesaResult && (
             <p role="status">
               {onesaResult === "link"
-                ? "This email already has a Factory account. Enter its email and password below, then link it to your Onesa account."
+                ? "This email already has a Factory account. Enter its email and password below, then link it to your sign-in."
                 : onesaResult === "mfa"
-                  ? "Your Factory administrator role requires a recent second factor. Sign in with Onesa to continue."
+                  ? "Your Factory administrator role requires a recent second factor. Sign in to continue."
                   : onesaResult === "denied"
                     ? "Factory could not verify access for this account. Contact your Factory administrator if you need access."
-                    : "Onesa sign-in did not complete. Try again."}
+                    : "Sign-in did not complete. Try again."}
             </p>
           )}
           {(hostedWorkspace || onesaEnabled) && (
@@ -214,7 +214,7 @@ export default function Login() {
                 disabled={isLoading}
                 onClick={() => void signInWithOnesa()}
               >
-                Continue with Onesa
+                Sign in
               </Button>
               {!hostedWorkspace && onesaResult === "link" && (
                 <Button
@@ -239,7 +239,7 @@ export default function Login() {
                   setOnesaEnabled(null);
                   void onesaAvailable().then(setOnesaEnabled)
                     .catch(() => setOnesaEnabled(false));
-                }}>Retry Onesa sign-in</Button>
+                }}>Retry Sign-in</Button>
             </div>
           )}
           {hostedWorkspace && error && <p role="alert">{error}</p>}
@@ -353,13 +353,11 @@ export default function Login() {
 
           <Button asChild variant="outline" className="w-full">
             {hostedWorkspace ? (
-              <a href={identityRegistration("user")} onClick={rememberRegistration}>Create an Onesa account</a>
+              <a href={identityRegistration("user")} onClick={rememberRegistration}>Sign up</a>
             ) : (
               <Link href="/register">Register</Link>
             )}
           </Button>
-
-          {hostedWorkspace && <a href={identityRegistration("admin")} onClick={rememberRegistration}>Request administrator access</a>}
 
           {/* Demo Accounts Section */}
           {demoAccountsQuery.isLoading && demoAccounts.length === 0 && (

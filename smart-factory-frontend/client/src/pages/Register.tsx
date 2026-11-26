@@ -114,18 +114,12 @@ export default function Register() {
     <RegistrationShell>
       <Card className="relative z-10 w-full max-w-md">
         <CardHeader>
-          <h1 className="text-2xl font-bold">Create your Onesa account</h1>
-          <CardDescription>
-            Your Onesa account works across products. Factory access is granted separately
-            after your administrator approves the required role.
-          </CardDescription>
+          <h1 className="text-2xl font-bold">Sign up</h1>
+
         </CardHeader>
         <CardContent className="space-y-3">
           <Button asChild className="w-full">
-            <a href={identityRegistration("user")} onClick={rememberRegistration}>Register as a user</a>
-          </Button>
-          <Button asChild variant="outline" className="w-full">
-            <a href={identityRegistration("admin")} onClick={rememberRegistration}>Request administrator access</a>
+            <a href={identityRegistration("user")} onClick={rememberRegistration}>Sign up</a>
           </Button>
           <Button asChild variant="ghost" className="w-full"><Link href="/login">Back to sign in</Link></Button>
         </CardContent>

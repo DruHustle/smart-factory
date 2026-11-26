@@ -102,7 +102,7 @@ function ManagedRecoveryRedirect() {
   // Never forward legacy reset tokens to the central issuer or repeat a
   // product-owned credential flow on hosted Factory.
   useEffect(() => { window.location.replace(identityRecovery); }, []);
-  return <a href={identityRecovery}>Open Onesa sign-in to recover your account</a>;
+  return <a href={identityRecovery}>Open sign-in to recover your account</a>;
 }
 
 function AppRouter() {
@@ -164,7 +164,7 @@ function AppRouter() {
           aria-labelledby="factory-access-heading"
         >
           <h1 id="factory-access-heading" className="text-2xl font-semibold">
-            Your Onesa account is signed in
+            You’re signed in
           </h1>
           <p>
             A Factory administrator must approve access to this factory before

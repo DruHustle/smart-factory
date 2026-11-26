@@ -204,12 +204,11 @@ export default function App() {
                 .
               </Text>
               <Button
-                title="Continue with Onesa"
+                title="Sign in"
                 onPress={login}
                 disabled={busy}
               />
-              {(["user","admin"] as const).map(audience=><Button key={audience}
-                title={audience==="admin"?"Request administrator access":"Create an Onesa account"}
+              <Button title="Sign up"
                 disabled={busy}
                 onPress={async () => {
                   if (submitting.current) return;
@@ -217,7 +216,7 @@ export default function App() {
                   const opening = { returned: false };
                   registrationBrowser.current = opening;
                   try {
-                    const url = await register(destination,audience);
+                    const url = await register(destination,"user");
                     // The second browser flow can start once registration closes.
                     registrationBrowser.current = null;
                     if (url || opening.returned) await receive(registrationReturn);
@@ -227,11 +226,11 @@ export default function App() {
                     submitting.current = false; setBusy(false);
                   }
                 }}
-              />)}
+              />
             </View>
           ) : pendingTier ? (
             <View style={styles.section}>
-              <Text>{pendingTier==="admin"?"Your Onesa administrator account is signed in.":"Your Onesa account is signed in."}</Text>
+              <Text>{pendingTier==="admin"?"Your Onesa administrator account is signed in.":"You’re signed in."}</Text>
               <Text>A Factory administrator must approve access to this factory before its records are available.</Text>
               <Button title="Sign out" onPress={logout}/>
             </View>
