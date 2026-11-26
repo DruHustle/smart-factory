@@ -28,14 +28,14 @@ export default function ForgotPassword() {
     <main className="flex min-h-screen items-center justify-center bg-background p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
-          <h1 className="text-2xl font-bold">Recover your Onesa account</h1>
+          <h1 className="text-2xl font-bold">Reset your password</h1>
           <CardDescription>
-            Factory uses your shared Onesa account. Open Onesa sign-in, then
+            Open the sign-in screen, then
             choose Forgot password to reset your password securely.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
-          <Button asChild className="w-full"><a href={identityRecovery}>Open Onesa sign-in</a></Button>
+          <Button asChild className="w-full"><a href={identityRecovery}>Open sign-in</a></Button>
           <Button asChild variant="outline" className="w-full"><Link href="/login">Back to sign in</Link></Button>
         </CardContent>
       </Card>
